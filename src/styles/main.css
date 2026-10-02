@@ -1,0 +1,1148 @@
+/* ============================================================================
+   TINY TOADS — Master Visual Stylesheet ("Premium Cartoon Tropical Swamp")
+   Base Stage: 1280x720 (Responsive to 1920x1080, 1366x768, Tablet & Mobile)
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Fredoka:wght@600;700&display=swap');
+
+:root {
+  --c-swamp-deep: #041518;
+  --c-swamp-teal: #072A2C;
+  --c-water-cyan: #00F5D4;
+  --c-water-blue: #00A8E8;
+  --c-lily-green: #38E54D;
+  --c-lily-light: #80FF72;
+  --c-wood-dark: #2B1508;
+  --c-wood-mid: #4E2A14;
+  --c-wood-light: #7A4424;
+  --c-outline: #1A0C05;
+  --c-gold-bright: #FFF3B0;
+  --c-gold-mid: #FFD100;
+  --c-gold-dark: #B65E00;
+  --c-grand: #FF2A6D;
+  --c-major: #B5179E;
+  --c-minor: #0096FF;
+  --c-mini: #2EC4B6;
+  --font-display: 'Fredoka', 'Baloo 2', system-ui, -apple-system, sans-serif;
+  --font-hud: 'Baloo 2', 'Fredoka', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #08333a 0%, #031014 100%);
+  font-family: var(--font-hud);
+  color: #ffffff;
+}
+
+/* ============================================================================
+   VIEWPORT & 1280x720 SCALABLE STAGE
+   ============================================================================ */
+.game-viewport {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.game-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1280px;
+  height: 720px;
+  flex-shrink: 0;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) scale(1);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.85),
+    0 0 0 4px #1a0c05,
+    0 0 32px rgba(0, 245, 212, 0.25);
+  background: var(--c-swamp-deep);
+}
+
+/* ============================================================================
+   MULTI-LAYER ANIMATED SWAMP BACKGROUND (BACKGROUND / MIDGROUND / FOREGROUND)
+   ============================================================================ */
+.bg-parallax-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bg-layer-painted {
+  filter: saturate(1.15) contrast(1.04);
+  animation: bgBreath 14s ease-in-out infinite alternate;
+}
+
+.bg-layer-midground {
+  opacity: 0.78;
+  animation: waterBob 6s ease-in-out infinite alternate;
+}
+
+.bg-layer-water {
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  animation: waterDrift 9s ease-in-out infinite alternate;
+}
+
+.bg-layer-foreground {
+  z-index: 4;
+  opacity: 0.88;
+  animation: foliageSway 7.5s ease-in-out infinite alternate;
+}
+
+@keyframes bgBreath {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.028); }
+}
+
+@keyframes waterBob {
+  0% { transform: translateY(0px) scaleX(1); }
+  100% { transform: translateY(5px) scaleX(1.012); }
+}
+
+@keyframes waterDrift {
+  0% { transform: translateX(-8px) translateY(0px); opacity: 0.42; }
+  100% { transform: translateX(8px) translateY(4px); opacity: 0.68; }
+}
+
+@keyframes foliageSway {
+  0% { transform: scale(1.01) rotate(-0.35deg); }
+  100% { transform: scale(1.02) rotate(0.35deg); }
+}
+
+#swamp-particles {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 720px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ============================================================================
+   TOP HUD: LOGO + 4 JACKPOT PANELS (GRAND, MAJOR, MINOR, MINI) + DEMO BADGE
+   ============================================================================ */
+.top-hud {
+  position: relative;
+  z-index: 12;
+  height: 96px;
+  padding: 6px 20px 0;
+  display: grid;
+  grid-template-columns: 220px 1fr 220px;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-logo-img {
+  height: 86px;
+  width: auto;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.65));
+  animation: logoFloat 4s ease-in-out infinite alternate;
+}
+
+@keyframes logoFloat {
+  0% { transform: translateY(0px) scale(1); }
+  100% { transform: translateY(-3px) scale(1.02); }
+}
+
+.jackpots-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.jackpot-card {
+  position: relative;
+  height: 74px;
+  border-radius: 20px;
+  border: 4px solid var(--c-outline);
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.6),
+    inset 0 2px 0 rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.jackpot-card:hover {
+  transform: translateY(-2px) scale(1.03);
+}
+
+.jackpot-card.jp-grand {
+  background: linear-gradient(180deg, #ff3377 0%, #8a002c 100%);
+  outline: 2.5px solid var(--c-gold-mid);
+}
+
+.jackpot-card.jp-major {
+  background: linear-gradient(180deg, #c724b1 0%, #480ca8 100%);
+  outline: 2.5px solid #ffd166;
+}
+
+.jackpot-card.jp-minor {
+  background: linear-gradient(180deg, #00b4d8 0%, #023e8a 100%);
+  outline: 2px solid #72f6ff;
+}
+
+.jackpot-card.jp-mini {
+  background: linear-gradient(180deg, #2ec4b6 0%, #0b525b 100%);
+  outline: 2px solid #80ff72;
+}
+
+.jp-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--c-gold-bright);
+  text-shadow:
+    0 2px 0 var(--c-outline),
+    -1.5px -1.5px 0 var(--c-outline),
+    1.5px -1.5px 0 var(--c-outline);
+}
+
+.jp-number {
+  font-family: var(--font-hud);
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  text-shadow:
+    0 3px 0 var(--c-outline),
+    0 0 12px rgba(255, 209, 0, 0.55);
+  line-height: 1.05;
+}
+
+.top-right-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.fictional-demo-pill {
+  background: rgba(11, 43, 48, 0.92);
+  border: 2.5px solid var(--c-gold-mid);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--c-gold-bright);
+  letter-spacing: 0.4px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.visual-sound-badge {
+  background: rgba(26, 12, 5, 0.88);
+  border: 2px solid var(--c-water-cyan);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-water-cyan);
+  transition: transform 0.15s ease;
+}
+
+.visual-sound-badge.vs-pulse {
+  animation: vsBadgePop 0.36s ease-out;
+}
+
+@keyframes vsBadgePop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.16); background: #005f73; color: #fff3b0; }
+  100% { transform: scale(1); }
+}
+
+/* ============================================================================
+   CENTER ARENA: 5 TINY TOADS + 5x3 REEL MACHINE
+   ============================================================================ */
+.center-stage-arena {
+  position: relative;
+  z-index: 10;
+  height: 492px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 5 Tiny Toads Stage Layer */
+.toads-stage-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 14;
+}
+
+.stage-toad {
+  position: absolute;
+  width: 142px;
+  height: 142px;
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.stage-toad:hover {
+  transform: scale(1.08);
+}
+
+.toad-pos-left-top {
+  left: 28px;
+  top: 44px;
+}
+
+.toad-pos-left-bottom {
+  left: 22px;
+  bottom: 32px;
+}
+
+.toad-pos-right-top {
+  right: 28px;
+  top: 44px;
+}
+
+.toad-pos-right-bottom {
+  right: 22px;
+  bottom: 32px;
+}
+
+.toad-pos-top-center {
+  left: 158px;
+  top: -16px;
+  width: 106px;
+  height: 106px;
+}
+
+.stage-toad-lilypad {
+  position: absolute;
+  bottom: 8px;
+  width: 118px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #80ff72 0%, #18a558 75%, #0a2910 100%);
+  border: 3px solid #0a2910;
+  box-shadow: 0 6px 14px rgba(0, 245, 212, 0.35);
+}
+
+.stage-toad-sprite {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6));
+}
+
+.stage-toad-sprite.state-idle,
+.stage-toad-sprite.state-blink {
+  animation: toadIdleBreath 2.6s ease-in-out infinite alternate;
+}
+
+.stage-toad-sprite.state-excited,
+.stage-toad-sprite.state-happy {
+  animation: toadBounceFast 0.45s ease-in-out infinite alternate;
+}
+
+.stage-toad-sprite.state-win,
+.stage-toad-sprite.state-jump {
+  animation: toadJumpJoy 0.55s cubic-bezier(0.28, 0.84, 0.42, 1) infinite alternate;
+}
+
+@keyframes toadIdleBreath {
+  0% { transform: translateY(0px) scale(1, 1); }
+  100% { transform: translateY(-4px) scale(1.02, 0.98); }
+}
+
+@keyframes toadBounceFast {
+  0% { transform: translateY(0px) scale(1.03, 0.97); }
+  100% { transform: translateY(-10px) scale(0.98, 1.04); }
+}
+
+@keyframes toadJumpJoy {
+  0% { transform: translateY(0px) rotate(-3deg); }
+  100% { transform: translateY(-18px) scale(1.08) rotate(3deg); }
+}
+
+.stage-toad-label {
+  position: absolute;
+  bottom: -6px;
+  background: rgba(26, 12, 5, 0.9);
+  border: 2px solid var(--c-gold-mid);
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--c-gold-bright);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================================
+   5x3 REEL MACHINE FRAME & REEL PHYSICS
+   ============================================================================ */
+.reel-machine-container {
+  position: relative;
+  width: 920px;
+  height: 484px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reel-frame-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 3;
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.75));
+}
+
+.reel-status-banner {
+  position: absolute;
+  top: -10px;
+  z-index: 8;
+  background: linear-gradient(180deg, #4e2a14 0%, #241006 100%);
+  border: 3px solid var(--c-gold-mid);
+  border-radius: 999px;
+  padding: 3px 22px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--c-gold-bright);
+  text-shadow: 0 2px 0 var(--c-outline);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+}
+
+.reels-viewport {
+  position: relative;
+  width: 828px;
+  height: 406px;
+  z-index: 4;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: inset 0 12px 24px rgba(0, 0, 0, 0.75);
+}
+
+.reels-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.reel-column {
+  position: relative;
+  height: 100%;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.reel-strip {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 6px;
+}
+
+/* Reel Physics States:
+   1. Acceleration pullback
+   2. Fast vertical spin + simulated motion blur
+   3. Deceleration + bounce + settle
+*/
+.reel-column.reel-accelerating .reel-strip {
+  transform: translateY(-18px) scaleY(0.96);
+  transition: transform 0.12s ease-out;
+}
+
+.reel-column.reel-spinning-blur .reel-strip {
+  animation: reelVerticalBlurSpin 0.11s linear infinite;
+  filter: blur(2.2px) brightness(1.12);
+}
+
+.reel-column.reel-bounce .reel-strip {
+  animation: reelStopBounceSettle 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes reelVerticalBlurSpin {
+  0% { transform: translateY(-22px) scaleY(1.08); }
+  50% { transform: translateY(22px) scaleY(1.12); }
+  100% { transform: translateY(-22px) scaleY(1.08); }
+}
+
+@keyframes reelStopBounceSettle {
+  0% { transform: translateY(-26px); }
+  55% { transform: translateY(16px) scaleY(0.95); }
+  80% { transform: translateY(-5px) scaleY(1.02); }
+  100% { transform: translateY(0px) scaleY(1); }
+}
+
+.reel-cell {
+  position: relative;
+  width: 100%;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  transition: transform 0.22s ease, opacity 0.22s ease, filter 0.22s ease;
+}
+
+.symbol-sprite {
+  width: 116px;
+  height: 116px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.6));
+  transition: transform 0.22s ease;
+}
+
+.reel-cell:hover .symbol-sprite {
+  transform: scale(1.06);
+}
+
+.reel-cell.state-winning {
+  z-index: 6;
+  animation: winningSymbolPulse 0.65s ease-in-out infinite alternate;
+}
+
+.reel-cell.state-winning .symbol-sprite {
+  filter:
+    drop-shadow(0 0 14px rgba(255, 209, 0, 0.95))
+    drop-shadow(0 4px 10px rgba(0, 0, 0, 0.8));
+}
+
+.reel-cell.state-disabled {
+  opacity: 0.42;
+  filter: grayscale(0.25);
+  transform: scale(0.94);
+}
+
+@keyframes winningSymbolPulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.11); }
+}
+
+.paylines-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.payline-beam {
+  stroke-dasharray: 14 8;
+  animation: paylineFlow 0.6s linear infinite;
+}
+
+@keyframes paylineFlow {
+  0% { stroke-dashoffset: 22; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* ============================================================================
+   BOTTOM ARCADE HUD & HERO SPIN BUTTON
+   ============================================================================ */
+.bottom-hud {
+  position: relative;
+  z-index: 15;
+  height: 124px;
+  padding: 0 22px 10px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.hud-group-left,
+.hud-group-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hud-group-right {
+  justify-content: flex-end;
+}
+
+.hud-stat-panel {
+  background: linear-gradient(180deg, #4e2a14 0%, #241006 100%);
+  border: 4px solid var(--c-outline);
+  outline: 2.5px solid var(--c-gold-mid);
+  border-radius: 18px;
+  padding: 6px 16px;
+  min-width: 168px;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.65),
+    inset 0 2px 0 rgba(255, 255, 255, 0.25);
+}
+
+.hud-stat-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--c-gold-bright);
+  text-transform: uppercase;
+}
+
+.hud-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  text-shadow: 0 2px 0 var(--c-outline);
+  line-height: 1.1;
+}
+
+.bet-adjuster-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-step {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  border: 3px solid var(--c-outline);
+  background: linear-gradient(180deg, #ffd100 0%, #d97706 100%);
+  color: var(--c-outline);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 0 var(--c-outline);
+  transition: transform 0.12s ease;
+}
+
+.btn-step:hover {
+  transform: scale(1.08);
+}
+
+.btn-step:active {
+  transform: translateY(2px) scale(0.96);
+}
+
+/* HERO SPIN BUTTON + AUTO */
+.spin-cluster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.btn-spin-hero {
+  position: relative;
+  width: 122px;
+  height: 122px;
+  margin-top: -18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-spin-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.75));
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+/* SPIN Button States: IDLE, HOVER, PRESS, SPINNING, WIN, DISABLED */
+.btn-spin-hero[data-state='idle'] img {
+  animation: spinIdleBreath 2.4s ease-in-out infinite alternate;
+}
+
+.btn-spin-hero[data-state='hover'] img {
+  transform: scale(1.08);
+  filter:
+    drop-shadow(0 0 18px rgba(128, 255, 114, 0.85))
+    drop-shadow(0 8px 18px rgba(0, 0, 0, 0.75));
+}
+
+.btn-spin-hero[data-state='pressed'] img {
+  transform: scale(0.92);
+}
+
+.btn-spin-hero[data-state='spinning'] img {
+  animation: spinActiveRotate 0.85s linear infinite;
+}
+
+.btn-spin-hero[data-state='win'] img {
+  animation: spinWinPulse 0.45s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 24px rgba(255, 209, 0, 0.95));
+}
+
+@keyframes spinIdleBreath {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.045); }
+}
+
+@keyframes spinActiveRotate {
+  0% { transform: rotate(0deg) scale(0.98); }
+  100% { transform: rotate(360deg) scale(0.98); }
+}
+
+@keyframes spinWinPulse {
+  0% { transform: scale(1.02); }
+  100% { transform: scale(1.12); }
+}
+
+.btn-arcade-pill {
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 16px;
+  border: 3.5px solid var(--c-outline);
+  outline: 2px solid var(--c-gold-mid);
+  background: linear-gradient(180deg, #00b4d8 0%, #004e89 100%);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.55);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.btn-arcade-pill:hover {
+  transform: translateY(-2px) scale(1.04);
+  filter: brightness(1.1);
+}
+
+.btn-arcade-pill.active {
+  background: linear-gradient(180deg, #ff2a6d 0%, #8f0924 100%);
+  outline-color: #fff3b0;
+}
+
+.btn-icon-round {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid var(--c-outline);
+  outline: 2px solid var(--c-gold-mid);
+  background: linear-gradient(180deg, #5c3317 0%, #2b1508 100%);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+  transition: transform 0.15s ease;
+}
+
+.btn-icon-round:hover {
+  transform: translateY(-2px) scale(1.07);
+}
+
+.btn-icon-round img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+/* Demo Director Trigger Strip (For instant testing of Win Tiers) */
+.director-demo-bar {
+  position: absolute;
+  left: 24px;
+  bottom: 114px;
+  z-index: 16;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(7, 29, 34, 0.88);
+  border: 2px solid rgba(0, 245, 212, 0.55);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.director-demo-bar span {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--c-water-cyan);
+  margin-right: 2px;
+}
+
+.btn-demo-chip {
+  border: 2px solid var(--c-outline);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-family: var(--font-hud);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  background: linear-gradient(180deg, #38e54d 0%, #0d7a22 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 0 var(--c-outline);
+  transition: transform 0.12s ease;
+}
+
+.btn-demo-chip:hover {
+  transform: scale(1.07);
+}
+
+.btn-demo-chip.chip-big {
+  background: linear-gradient(180deg, #ffb703 0%, #b65e00 100%);
+}
+
+.btn-demo-chip.chip-mega {
+  background: linear-gradient(180deg, #ff2a6d 0%, #7209b7 100%);
+}
+
+/* ============================================================================
+   WIN CELEBRATION OVERLAY (BIG WIN / MEGA WIN)
+   ============================================================================ */
+.win-celebration-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: radial-gradient(
+    circle at center,
+    rgba(18, 8, 38, 0.78) 0%,
+    rgba(4, 15, 20, 0.92) 100%
+  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  animation: fadeInOverlay 0.28s ease-out;
+}
+
+.win-celebration-overlay[hidden] {
+  display: none !important;
+}
+
+.win-rays-bg {
+  position: absolute;
+  width: 680px;
+  height: 680px;
+  object-fit: contain;
+  pointer-events: none;
+  animation: spinActiveRotate 14s linear infinite;
+}
+
+.win-tier-title {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 82px;
+  font-weight: 900;
+  color: var(--c-gold-mid);
+  text-shadow:
+    0 8px 0 var(--c-outline),
+    0 0 36px rgba(255, 209, 0, 0.95);
+  animation: winTitlePop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) infinite alternate;
+}
+
+.win-tier-subtitle {
+  position: relative;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--c-water-cyan);
+  text-shadow: 0 3px 0 var(--c-outline);
+}
+
+.win-tier-amount {
+  position: relative;
+  font-size: 54px;
+  font-weight: 900;
+  color: #ffffff;
+  background: linear-gradient(180deg, #ff2a6d 0%, #7a0026 100%);
+  border: 5px solid var(--c-gold-mid);
+  border-radius: 999px;
+  padding: 6px 38px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.75);
+}
+
+.win-overlay-toads {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.win-celebration-toad {
+  width: 118px;
+  height: 118px;
+  object-fit: contain;
+  animation: toadJumpJoy 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes winTitlePop {
+  0% { transform: scale(1) rotate(-1.5deg); }
+  100% { transform: scale(1.08) rotate(1.5deg); }
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ============================================================================
+   MODALS: PAYTABLE, ART DIRECTOR ASSET GALLERY & SETTINGS
+   ============================================================================ */
+.arcade-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: rgba(3, 14, 18, 0.86);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.arcade-modal[hidden] {
+  display: none !important;
+}
+
+.modal-card {
+  width: 1080px;
+  max-height: 640px;
+  background: linear-gradient(180deg, #10373d 0%, #071d21 100%);
+  border: 5px solid var(--c-outline);
+  outline: 3px solid var(--c-gold-mid);
+  border-radius: 26px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+}
+
+.modal-header {
+  padding: 14px 24px;
+  background: linear-gradient(180deg, #4e2a14 0%, #2b1508 100%);
+  border-bottom: 3px solid var(--c-gold-mid);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--c-gold-bright);
+  text-shadow: 0 3px 0 var(--c-outline);
+}
+
+.modal-body {
+  padding: 18px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.paytable-symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.paytable-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 209, 0, 0.45);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.paytable-card img {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+}
+
+.paytable-card-info h4 {
+  font-size: 14px;
+  color: var(--c-gold-bright);
+}
+
+.badge-cat {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 245, 212, 0.2);
+  color: var(--c-water-cyan);
+  margin: 2px 0 4px;
+}
+
+.payout-list {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #e0fbfc;
+}
+
+/* Art Gallery Inspector */
+.gallery-section-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--c-water-cyan);
+  border-bottom: 2px solid rgba(0, 245, 212, 0.3);
+  padding-bottom: 4px;
+}
+
+.gallery-toads-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gallery-toad-card {
+  background: rgba(0, 0, 0, 0.32);
+  border: 2px solid rgba(255, 209, 0, 0.35);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.gallery-toad-card h4 {
+  color: var(--c-gold-bright);
+  font-size: 16px;
+}
+
+.role-sub {
+  font-size: 12px;
+  color: #90e0ef;
+  margin-bottom: 8px;
+}
+
+.toad-states-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.state-thumb {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 6px;
+  text-align: center;
+}
+
+.state-thumb img {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+}
+
+.state-thumb figcaption {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--c-water-cyan);
+  text-transform: uppercase;
+}
+
+.gallery-symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.gallery-sym-card {
+  background: rgba(0, 0, 0, 0.32);
+  border: 2px solid rgba(0, 245, 212, 0.28);
+  border-radius: 14px;
+  padding: 10px;
+  text-align: center;
+}
+
+.sym-states-row {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.sym-states-row img {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+}
+
+.gallery-sym-card code,
+.gallery-logo-card code {
+  display: block;
+  font-size: 10px;
+  color: #80ff72;
+  margin-top: 2px;
+}
+
+.gallery-logos-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.gallery-logo-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 209, 0, 0.35);
+  border-radius: 14px;
+  padding: 10px;
+  text-align: center;
+}
+
+.gallery-logo-card img {
+  height: 84px;
+  max-width: 100%;
+  object-fit: contain;
+}

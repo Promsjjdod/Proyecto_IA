@@ -1,0 +1,19 @@
+{
+  "name": "tiny-toads-arcade",
+  "version": "1.0.0",
+  "description": "TINY TOADS — Fictional Tropical Swamp Arcade Slot Game Demo & Visual Identity System (Virtual Credits Only)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "generate-assets": "node scripts/generate_assets.mjs"
+  },
+  "keywords": [
+    "tiny-toads",
+    "game-art",
+    "2d-assets",
+    "arcade-demo",
+    "html5-canvas"
+  ],
+  "license": "MIT"
+}

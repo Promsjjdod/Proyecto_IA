@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 220" width="460" height="220">
+    <defs>
+      <linearGradient id="logoWoodF" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#7A4424"/>
+        <stop offset="50%" stop-color="#43220F"/>
+        <stop offset="100%" stop-color="#210E05"/>
+      </linearGradient>
+      <linearGradient id="logoGoldF" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FFF8D6"/>
+        <stop offset="50%" stop-color="#FFD100"/>
+        <stop offset="100%" stop-color="#D97706"/>
+      </linearGradient>
+      <linearGradient id="logoGreenF" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#B7FFBF"/>
+        <stop offset="50%" stop-color="#38E54D"/>
+        <stop offset="100%" stop-color="#0D7A22"/>
+      </linearGradient>
+    </defs>
+    <!-- Lilypad Base & Lotus Petals -->
+    <ellipse cx="230" cy="188" rx="196" ry="26" fill="#29D844" stroke="#1A0C05" stroke-width="5.5"/>
+    <path d="M52,182 C28,158 58,136 82,162 Z" fill="#FF4D6D" stroke="#1A0C05" stroke-width="4"/>
+    <path d="M408,182 C432,158 402,136 378,162 Z" fill="#FF4D6D" stroke="#1A0C05" stroke-width="4"/>
+    <!-- Carved Wooden Plaque -->
+    <rect x="34" y="42" width="392" height="144" rx="38" fill="url(#logoWoodF)" stroke="url(#logoGoldF)" stroke-width="7"/>
+    <rect x="44" y="52" width="372" height="124" rx="30" fill="none" stroke="#8C583A" stroke-width="2.5" opacity="0.6"/>
+    <!-- Cute Frog Peeking Over Plaque with Crown & Hands -->
+    <ellipse cx="230" cy="40" rx="44" ry="24" fill="#29D844" stroke="#1A0C05" stroke-width="5"/>
+    <polygon points="214,18 222,4 230,14 238,4 246,18" fill="#FFD100" stroke="#1A0C05" stroke-width="3"/>
+    <circle cx="206" cy="28" r="16" fill="#FFFFFF" stroke="#1A0C05" stroke-width="4.5"/>
+    <circle cx="254" cy="28" r="16" fill="#FFFFFF" stroke="#1A0C05" stroke-width="4.5"/>
+    <circle cx="207" cy="28" r="8" fill="#090C10"/>
+    <circle cx="253" cy="28" r="8" fill="#090C10"/>
+    <circle cx="204" cy="24" r="3.5" fill="#FFFFFF"/>
+    <circle cx="250" cy="24" r="3.5" fill="#FFFFFF"/>
+    <ellipse cx="176" cy="44" rx="14" ry="9" fill="#80FF72" stroke="#1A0C05" stroke-width="4"/>
+    <ellipse cx="284" cy="44" rx="14" ry="9" fill="#80FF72" stroke="#1A0C05" stroke-width="4"/>
+    <!-- TINY -->
+    <text x="230" y="104" font-family="DejaVu Sans, sans-serif" font-weight="900" font-size="52" text-anchor="middle" fill="url(#logoGreenF)" stroke="#1A0C05" stroke-width="12" paint-order="stroke" letter-spacing="2">TINY</text>
+    <!-- TOADS -->
+    <text x="230" y="164" font-family="DejaVu Sans, sans-serif" font-weight="900" font-size="68" text-anchor="middle" fill="url(#logoGoldF)" stroke="#1A0C05" stroke-width="14" paint-order="stroke" letter-spacing="1">TOADS</text>
+    <!-- Sparkles -->
+    <polygon points="74,74 78,84 88,88 78,92 74,102 70,92 60,88 70,84" fill="#FFF3B0"/>
+    <polygon points="386,74 390,84 400,88 390,92 386,102 382,92 372,88 382,84" fill="#00F5D4"/>
+  </svg>

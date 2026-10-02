@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        
+      </defs>
+
+      <g opacity="0.42">
+        
+        
+        
+        <!-- Outer Glow Aura -->
+        <circle cx="100" cy="134" r="46" fill="#FFD100" opacity="0.35"/>
+        <!-- Wings -->
+        <ellipse cx="66" cy="86" rx="34" ry="18" transform="rotate(-28 66 86)" fill="#FFF8D6" stroke="#1A0C05" stroke-width="5"/>
+        <ellipse cx="134" cy="86" rx="34" ry="18" transform="rotate(28 134 86)" fill="#FFF8D6" stroke="#1A0C05" stroke-width="5"/>
+        <!-- Glowing Lantern Abdomen -->
+        <ellipse cx="100" cy="132" rx="30" ry="34" fill="#FFF3B0" stroke="#1A0C05" stroke-width="6"/>
+        <ellipse cx="100" cy="132" rx="22" ry="25" fill="#FFD100"/>
+        <!-- Thorax & Cute Head -->
+        <ellipse cx="100" cy="86" rx="26" ry="22" fill="#5A189A" stroke="#1A0C05" stroke-width="6"/>
+        <circle cx="88" cy="80" r="8" fill="#FFFFFF" stroke="#1A0C05" stroke-width="3"/>
+        <circle cx="112" cy="80" r="8" fill="#FFFFFF" stroke="#1A0C05" stroke-width="3"/>
+        <path d="M88,64 C78,42 62,44 66,54" fill="none" stroke="#1A0C05" stroke-width="5" stroke-linecap="round"/>
+        <path d="M112,64 C122,42 138,44 134,54" fill="none" stroke="#1A0C05" stroke-width="5" stroke-linecap="round"/>
+      
+      </g>
+    </svg>

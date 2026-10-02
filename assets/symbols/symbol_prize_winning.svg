@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        <radialGradient id="featGrad_symbol_prize" cx="50%" cy="40%" r="65%">
+                <stop offset="0%" stop-color="#FFF3B0"/>
+                <stop offset="100%" stop-color="#FB8500"/>
+              </radialGradient>
+      </defs>
+
+      <g opacity="1">
+        <rect x="10" y="10" width="180" height="180" rx="36" fill="none" stroke="#FFD100" stroke-width="8" opacity="0.9"/>
+        <circle cx="100" cy="100" r="88" fill="#FFD100" opacity="0.22"/>
+               <polygon points="28,28 33,40 45,45 33,50 28,62 23,50 11,45 23,40" fill="#FFF3B0"/>
+               <polygon points="172,28 177,40 189,45 177,50 172,62 167,50 155,45 167,40" fill="#FFF3B0"/>
+        
+        <circle cx="100" cy="94" r="70" fill="url(#featGrad_symbol_prize)" stroke="#1A0C05" stroke-width="7"/>
+        <circle cx="100" cy="94" r="62" fill="none" stroke="#FFFFFF" stroke-width="3.5" opacity="0.8"/>
+        <path d="M44,104 C64,128 136,128 156,104 C142,76 58,76 44,104 Z" fill="#FF2A6D" stroke="#1A0C05" stroke-width="5"/>
+        <circle cx="100" cy="82" r="28" fill="#FFF8D6" stroke="#1A0C05" stroke-width="5"/>
+        <circle cx="90" cy="72" r="9" fill="#FFFFFF"/>
+        <rect x="18" y="132" width="164" height="46" rx="15" fill="#1A0C05" stroke="#FFD100" stroke-width="5.5"/>
+        <text x="100" y="163" font-family="DejaVu Sans, sans-serif" font-weight="900" font-size="28" text-anchor="middle" fill="#FFF3B0" letter-spacing="1.5">PRIZE</text>
+      
+      </g>
+    </svg>

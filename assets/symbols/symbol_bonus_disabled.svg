@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        <radialGradient id="featGrad_symbol_bonus" cx="50%" cy="40%" r="65%">
+                <stop offset="0%" stop-color="#FF2A6D"/>
+                <stop offset="100%" stop-color="#7209B7"/>
+              </radialGradient>
+      </defs>
+
+      <g opacity="0.42">
+        
+        
+        
+        <circle cx="100" cy="94" r="70" fill="url(#featGrad_symbol_bonus)" stroke="#1A0C05" stroke-width="7"/>
+        <circle cx="100" cy="94" r="62" fill="none" stroke="#FF85A1" stroke-width="3.5"/>
+        <!-- Golden Totem Drum & Gems -->
+        <rect x="56" y="48" width="88" height="76" rx="16" fill="#FFB703" stroke="#1A0C05" stroke-width="5.5"/>
+        <circle cx="82" cy="76" r="10" fill="#00F5D4" stroke="#1A0C05" stroke-width="3.5"/>
+        <circle cx="118" cy="76" r="10" fill="#00F5D4" stroke="#1A0C05" stroke-width="3.5"/>
+        <rect x="74" y="98" width="52" height="14" rx="5" fill="#FFF3B0" stroke="#1A0C05" stroke-width="3.5"/>
+        <rect x="18" y="132" width="164" height="46" rx="15" fill="#1A0C05" stroke="#FF2A6D" stroke-width="5.5"/>
+        <text x="100" y="163" font-family="DejaVu Sans, sans-serif" font-weight="900" font-size="28" text-anchor="middle" fill="#FF85A1" letter-spacing="1.5">BONUS</text>
+      
+      </g>
+    </svg>

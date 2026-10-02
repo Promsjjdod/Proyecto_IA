@@ -1,0 +1,407 @@
+{
+  "game": "TINY TOADS",
+  "baseResolution": {
+    "width": 1280,
+    "height": 720
+  },
+  "characters": [
+    {
+      "id": "green",
+      "name": "Hoppy",
+      "states": [
+        "idle",
+        "blink",
+        "happy",
+        "excited",
+        "win",
+        "jump",
+        "shocked"
+      ],
+      "files": {
+        "idle": "assets/characters/tiny_toad_green_idle.png",
+        "blink": "assets/characters/tiny_toad_green_blink.png",
+        "happy": "assets/characters/tiny_toad_green_happy.png",
+        "excited": "assets/characters/tiny_toad_green_excited.png",
+        "win": "assets/characters/tiny_toad_green_win.png",
+        "jump": "assets/characters/tiny_toad_green_jump.png",
+        "shocked": "assets/characters/tiny_toad_green_shocked.png"
+      }
+    },
+    {
+      "id": "blue",
+      "name": "Splash",
+      "states": [
+        "idle",
+        "blink",
+        "happy",
+        "excited",
+        "win",
+        "jump",
+        "shocked"
+      ],
+      "files": {
+        "idle": "assets/characters/tiny_toad_blue_idle.png",
+        "blink": "assets/characters/tiny_toad_blue_blink.png",
+        "happy": "assets/characters/tiny_toad_blue_happy.png",
+        "excited": "assets/characters/tiny_toad_blue_excited.png",
+        "win": "assets/characters/tiny_toad_blue_win.png",
+        "jump": "assets/characters/tiny_toad_blue_jump.png",
+        "shocked": "assets/characters/tiny_toad_blue_shocked.png"
+      }
+    },
+    {
+      "id": "red",
+      "name": "Blaze",
+      "states": [
+        "idle",
+        "blink",
+        "happy",
+        "excited",
+        "win",
+        "jump",
+        "shocked"
+      ],
+      "files": {
+        "idle": "assets/characters/tiny_toad_red_idle.png",
+        "blink": "assets/characters/tiny_toad_red_blink.png",
+        "happy": "assets/characters/tiny_toad_red_happy.png",
+        "excited": "assets/characters/tiny_toad_red_excited.png",
+        "win": "assets/characters/tiny_toad_red_win.png",
+        "jump": "assets/characters/tiny_toad_red_jump.png",
+        "shocked": "assets/characters/tiny_toad_red_shocked.png"
+      }
+    },
+    {
+      "id": "purple",
+      "name": "Mystic",
+      "states": [
+        "idle",
+        "blink",
+        "happy",
+        "excited",
+        "win",
+        "jump",
+        "shocked"
+      ],
+      "files": {
+        "idle": "assets/characters/tiny_toad_purple_idle.png",
+        "blink": "assets/characters/tiny_toad_purple_blink.png",
+        "happy": "assets/characters/tiny_toad_purple_happy.png",
+        "excited": "assets/characters/tiny_toad_purple_excited.png",
+        "win": "assets/characters/tiny_toad_purple_win.png",
+        "jump": "assets/characters/tiny_toad_purple_jump.png",
+        "shocked": "assets/characters/tiny_toad_purple_shocked.png"
+      }
+    },
+    {
+      "id": "gold",
+      "name": "King Croak",
+      "states": [
+        "idle",
+        "blink",
+        "happy",
+        "excited",
+        "win",
+        "jump",
+        "shocked"
+      ],
+      "files": {
+        "idle": "assets/characters/tiny_toad_gold_idle.png",
+        "blink": "assets/characters/tiny_toad_gold_blink.png",
+        "happy": "assets/characters/tiny_toad_gold_happy.png",
+        "excited": "assets/characters/tiny_toad_gold_excited.png",
+        "win": "assets/characters/tiny_toad_gold_win.png",
+        "jump": "assets/characters/tiny_toad_gold_jump.png",
+        "shocked": "assets/characters/tiny_toad_gold_shocked.png"
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "id": "symbol_a",
+      "type": "common",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_a.png"
+    },
+    {
+      "id": "symbol_k",
+      "type": "common",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_k.png"
+    },
+    {
+      "id": "symbol_q",
+      "type": "common",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_q.png"
+    },
+    {
+      "id": "symbol_j",
+      "type": "common",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_j.png"
+    },
+    {
+      "id": "symbol_10",
+      "type": "common",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_10.png"
+    },
+    {
+      "id": "symbol_frog",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_frog.png"
+    },
+    {
+      "id": "symbol_lilypad",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_lilypad.png"
+    },
+    {
+      "id": "symbol_chest",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_chest.png"
+    },
+    {
+      "id": "symbol_rock",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_rock.png"
+    },
+    {
+      "id": "symbol_dragonfly",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_dragonfly.png"
+    },
+    {
+      "id": "symbol_firefly",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_firefly.png"
+    },
+    {
+      "id": "symbol_water_flower",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_water_flower.png"
+    },
+    {
+      "id": "symbol_snail",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_snail.png"
+    },
+    {
+      "id": "symbol_fish",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_fish.png"
+    },
+    {
+      "id": "symbol_tropical_fruit",
+      "type": "special",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_tropical_fruit.png"
+    },
+    {
+      "id": "symbol_wild",
+      "type": "feature",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_wild.png"
+    },
+    {
+      "id": "symbol_bonus",
+      "type": "feature",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_bonus.png"
+    },
+    {
+      "id": "symbol_scatter",
+      "type": "feature",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_scatter.png"
+    },
+    {
+      "id": "symbol_prize",
+      "type": "feature",
+      "states": [
+        "normal",
+        "highlighted",
+        "winning",
+        "disabled",
+        "animated"
+      ],
+      "defaultFile": "assets/symbols/symbol_prize.png"
+    }
+  ],
+  "reelPhysics": {
+    "columns": 5,
+    "rows": 3,
+    "accelerationMs": 160,
+    "steadySpinMs": 680,
+    "columnStaggerMs": 180,
+    "decelerationBounceMs": 260,
+    "bounceOvershootPx": 18
+  },
+  "winTiers": {
+    "SMALL_WIN": {
+      "minMultiplier": 1,
+      "maxMultiplier": 4,
+      "effects": [
+        "glow",
+        "virtual_coins",
+        "sparkles"
+      ]
+    },
+    "MEDIUM_WIN": {
+      "minMultiplier": 5,
+      "maxMultiplier": 14,
+      "effects": [
+        "symbol_zoom",
+        "light_burst",
+        "bubbles_and_coins"
+      ]
+    },
+    "BIG_WIN": {
+      "minMultiplier": 15,
+      "maxMultiplier": 39,
+      "effects": [
+        "dim_background",
+        "camera_pulse",
+        "big_banner",
+        "gold_fountain"
+      ]
+    },
+    "MEGA_WIN": {
+      "minMultiplier": 40,
+      "maxMultiplier": 999,
+      "effects": [
+        "fullscreen_celebration",
+        "sunburst_rays",
+        "all_toads_jump",
+        "mega_fanfare"
+      ]
+    }
+  },
+  "visualSoundEvents": [
+    "spin",
+    "reel_stop",
+    "symbol_land",
+    "win",
+    "big_win",
+    "jackpot",
+    "button_click"
+  ]
+}

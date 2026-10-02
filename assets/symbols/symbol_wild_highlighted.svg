@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        <radialGradient id="featGrad_symbol_wild" cx="50%" cy="40%" r="65%">
+                <stop offset="0%" stop-color="#FFD100"/>
+                <stop offset="100%" stop-color="#FF5400"/>
+              </radialGradient>
+      </defs>
+
+      <g opacity="1">
+        <rect x="10" y="10" width="180" height="180" rx="36" fill="none" stroke="#00F5D4" stroke-width="5" opacity="0.9"/>
+        
+        
+        <circle cx="100" cy="94" r="70" fill="url(#featGrad_symbol_wild)" stroke="#1A0C05" stroke-width="7"/>
+        <circle cx="100" cy="94" r="62" fill="none" stroke="#FFF3B0" stroke-width="3.5"/>
+        <!-- Golden Lilypad & Crowned Frog Wild Emblem -->
+        <ellipse cx="100" cy="112" rx="52" ry="22" fill="#38E54D" stroke="#1A0C05" stroke-width="5"/>
+        <path d="M62,92 L54,54 L80,72 L100,42 L120,72 L146,54 L138,92 Z" fill="#FFF3B0" stroke="#1A0C05" stroke-width="5.5" stroke-linejoin="round"/>
+        <circle cx="100" cy="76" r="7" fill="#FF2A6D" stroke="#1A0C05" stroke-width="2.5"/>
+        <circle cx="78" cy="80" r="5" fill="#00F5D4" stroke="#1A0C05" stroke-width="2"/>
+        <circle cx="122" cy="80" r="5" fill="#00F5D4" stroke="#1A0C05" stroke-width="2"/>
+        <rect x="18" y="132" width="164" height="46" rx="15" fill="#1A0C05" stroke="#FFD100" stroke-width="5.5"/>
+        <text x="100" y="164" font-family="DejaVu Sans, sans-serif" font-weight="900" font-size="31" text-anchor="middle" fill="#FFD100" letter-spacing="2">WILD</text>
+      
+      </g>
+    </svg>

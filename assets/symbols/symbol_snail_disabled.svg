@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        
+      </defs>
+
+      <g opacity="0.42">
+        
+        
+        
+        <!-- Soft Snail Body -->
+        <path d="M28,144 C44,126 146,126 172,142 C180,154 156,164 98,164 C44,164 20,154 28,144 Z" fill="#72F6FF" stroke="#1A0C05" stroke-width="6" stroke-linejoin="round"/>
+        <circle cx="156" cy="96" r="7" fill="#FFFFFF" stroke="#1A0C05" stroke-width="4"/>
+        <circle cx="174" cy="102" r="7" fill="#FFFFFF" stroke="#1A0C05" stroke-width="4"/>
+        <line x1="148" y1="132" x2="156" y2="103" stroke="#1A0C05" stroke-width="5"/>
+        <line x1="160" y1="134" x2="172" y2="109" stroke="#1A0C05" stroke-width="5"/>
+        <!-- Spiral Crystal Shell -->
+        <circle cx="88" cy="104" r="46" fill="#9D4EDD" stroke="#1A0C05" stroke-width="6.5"/>
+        <path d="M88,104 C88,88 108,88 108,104 C108,124 72,124 72,100 C72,72 122,72 122,106" fill="none" stroke="#FFD100" stroke-width="6" stroke-linecap="round"/>
+      
+      </g>
+    </svg>

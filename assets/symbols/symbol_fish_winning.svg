@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        
+      </defs>
+
+      <g opacity="1">
+        <rect x="10" y="10" width="180" height="180" rx="36" fill="none" stroke="#FFD100" stroke-width="8" opacity="0.9"/>
+        <circle cx="100" cy="100" r="88" fill="#FFD100" opacity="0.22"/>
+               <polygon points="28,28 33,40 45,45 33,50 28,62 23,50 11,45 23,40" fill="#FFF3B0"/>
+               <polygon points="172,28 177,40 189,45 177,50 172,62 167,50 155,45 167,40" fill="#FFF3B0"/>
+        
+        <!-- Tropical Swamp Fish -->
+        <path d="M142,100 L178,66 L170,100 L178,134 Z" fill="#FF2A6D" stroke="#1A0C05" stroke-width="6" stroke-linejoin="round"/>
+        <ellipse cx="94" cy="100" rx="58" ry="42" fill="#00B4D8" stroke="#1A0C05" stroke-width="6.5"/>
+        <path d="M74,60 C94,34 126,42 122,64" fill="#FFD100" stroke="#1A0C05" stroke-width="5.5" stroke-linejoin="round"/>
+        <path d="M84,62 Q104,100 84,138" fill="none" stroke="#FFD100" stroke-width="8" stroke-linecap="round"/>
+        <path d="M112,66 Q128,100 112,134" fill="none" stroke="#FF2A6D" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="62" cy="92" r="12" fill="#FFFFFF" stroke="#1A0C05" stroke-width="4.5"/>
+        <circle cx="60" cy="92" r="6" fill="#090C10"/>
+      
+      </g>
+    </svg>

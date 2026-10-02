@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+    <defs>
+      <radialGradient id="spinCrystal_hover" cx="38%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#80FF72"/>
+        <stop offset="100%" stop-color="#18A558"/>
+      </radialGradient>
+      <linearGradient id="spinGold_hover" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FFF8D6"/>
+        <stop offset="50%" stop-color="#FFF3B0"/>
+        <stop offset="100%" stop-color="#9C4A00"/>
+      </linearGradient>
+    </defs>
+    <!-- Outer Glow -->
+    <circle cx="90" cy="90" r="84" fill="#80FF72" opacity="0.28"/>
+    <!-- Metallic / Fantasy Ring -->
+    <circle cx="90" cy="90" r="76" fill="url(#spinGold_hover)" stroke="#1A0C05" stroke-width="7"/>
+    <!-- Inner Crystal Orb -->
+    <circle cx="90" cy="90" r="62" fill="url(#spinCrystal_hover)" stroke="#1A0C05" stroke-width="5"/>
+    <!-- Top Glossy Highlight -->
+    <ellipse cx="90" cy="56" rx="38" ry="18" fill="#FFFFFF" opacity="0.42"/>
+    <!-- Circular Spin Arrows -->
+    <path d="M54,78 A38,38 0 0,1 124,72" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+    <polygon points="132,82 114,76 128,60" fill="#FFFFFF"/>
+    <path d="M126,102 A38,38 0 0,1 56,108" fill="none" stroke="#FFF3B0" stroke-width="9" stroke-linecap="round"/>
+    <polygon points="48,98 66,104 52,120" fill="#FFF3B0"/>
+    <!-- SPIN Label -->
+    <text x="90" y="99" font-family="DejaVu Sans, sans-serif" font-weight="900" font-size="26" text-anchor="middle" fill="#FFFFFF" stroke="#1A0C05" stroke-width="6" paint-order="stroke">SPIN</text>
+  </svg>

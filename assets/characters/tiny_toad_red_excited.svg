@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+    <defs>
+      <radialGradient id="bodyGrad" cx="38%" cy="28%" r="70%">
+        <stop offset="0%" stop-color="#FF8FA3"/>
+        <stop offset="55%" stop-color="#FF2A55"/>
+        <stop offset="100%" stop-color="#8F0924"/>
+      </radialGradient>
+      <linearGradient id="bellyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FFE5B4"/>
+        <stop offset="100%" stop-color="#FF9E6D"/>
+      </linearGradient>
+      <linearGradient id="goldCrownGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FFF8B8"/>
+        <stop offset="50%" stop-color="#FFD100"/>
+        <stop offset="100%" stop-color="#D97706"/>
+      </linearGradient>
+    </defs>
+
+    <!-- Ground / Lilypad Shadow -->
+    <ellipse cx="128" cy="232" rx="64" ry="14" fill="#041518" opacity="0.45"/>
+
+    <g transform="translate(0, -6) scale(1, 1.02)">
+      <!-- Back Legs -->
+      <ellipse cx="66" cy="198" rx="30" ry="22" transform="rotate(-18 66 198)" fill="url(#bodyGrad)" stroke="#2D0610" stroke-width="6"/>
+      <ellipse cx="190" cy="198" rx="30" ry="22" transform="rotate(18 190 198)" fill="url(#bodyGrad)" stroke="#2D0610" stroke-width="6"/>
+
+      <!-- Webbed Feet -->
+      <path d="M36,214 C42,202 68,202 78,216 C64,222 46,222 36,214 Z" fill="#FF8FA3" stroke="#2D0610" stroke-width="5.5" stroke-linejoin="round"/>
+      <path d="M178,216 C188,202 214,202 220,214 C210,222 192,222 178,216 Z" fill="#FF8FA3" stroke="#2D0610" stroke-width="5.5" stroke-linejoin="round"/>
+
+      <!-- Main Chubby Body & Head -->
+      <ellipse cx="128" cy="150" rx="76" ry="68" fill="url(#bodyGrad)" stroke="#2D0610" stroke-width="6.5"/>
+      <ellipse cx="128" cy="112" rx="74" ry="54" fill="url(#bodyGrad)" stroke="#2D0610" stroke-width="6.5"/>
+      <!-- Seamless body merge fill -->
+      <ellipse cx="128" cy="134" rx="71" ry="56" fill="url(#bodyGrad)"/>
+
+      <!-- Glossy Rim Highlight -->
+      <path d="M68,94 C88,68 168,68 188,94" fill="none" stroke="#FFBE0B" stroke-width="4" stroke-linecap="round" opacity="0.65"/>
+
+      <!-- Belly Patch -->
+      <ellipse cx="128" cy="168" rx="48" ry="40" fill="url(#bellyGrad)" stroke="#2D0610" stroke-width="4"/>
+      <ellipse cx="114" cy="154" rx="16" ry="9" fill="#FFFFFF" opacity="0.45" transform="rotate(-15 114 154)"/>
+
+      <!-- Cheeks -->
+      <ellipse cx="68" cy="118" rx="13" ry="8" fill="#FFBE0B" opacity="0.75"/>
+      <ellipse cx="188" cy="118" rx="13" ry="8" fill="#FFBE0B" opacity="0.75"/>
+
+      <!-- Arms -->
+      
+      <path d="M62,150 C32,126 22,98 34,88 C44,80 58,104 72,132" fill="url(#bodyGrad)" stroke="#2D0610" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M194,150 C224,126 234,98 222,88 C212,80 198,104 184,132" fill="url(#bodyGrad)" stroke="#2D0610" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="32" cy="88" r="9" fill="#FF8FA3" stroke="#2D0610" stroke-width="4"/>
+      <circle cx="224" cy="88" r="9" fill="#FF8FA3" stroke="#2D0610" stroke-width="4"/>
+
+      <!-- Head Accessory -->
+      
+      <g transform="translate(128, 34)">
+        <path d="M-18,18 C-24,-2 -6,-12 0,4 C8,-14 24,-2 18,18 Z" fill="#FFBE0B" stroke="#2D0610" stroke-width="5" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Eyes -->
+      
+      <g>
+        <circle cx="88" cy="78" r="31" fill="#FFFFFF" stroke="#2D0610" stroke-width="6"/>
+        <circle cx="168" cy="78" r="31" fill="#FFFFFF" stroke="#2D0610" stroke-width="6"/>
+        <circle cx="91" cy="78" r="20" fill="#D90429"/>
+        <circle cx="165" cy="78" r="20" fill="#D90429"/>
+        <circle cx="91" cy="78" r="12" fill="#090C10"/>
+        <circle cx="165" cy="78" r="12" fill="#090C10"/>
+        <circle cx="83" cy="69" r="8" fill="#FFFFFF"/>
+        <circle cx="157" cy="69" r="8" fill="#FFFFFF"/>
+        <circle cx="98" cy="86" r="4" fill="#FFFFFF"/>
+        <circle cx="172" cy="86" r="4" fill="#FFFFFF"/>
+        <polygon points="91,64 94,72 102,75 94,78 91,86 88,78 80,75 88,72" fill="#FFF3B0"/>
+               <polygon points="165,64 168,72 176,75 168,78 165,86 162,78 154,75 162,72" fill="#FFF3B0"/>
+      </g>
+
+      <!-- Nostrils -->
+      <circle cx="120" cy="102" r="3" fill="#2D0610"/>
+      <circle cx="136" cy="102" r="3" fill="#2D0610"/>
+
+      <!-- Mouth -->
+      
+      <path d="M84,118 Q128,130 172,118 C170,154 86,154 84,118 Z" fill="#6B0F2B" stroke="#2D0610" stroke-width="5.5" stroke-linejoin="round"/>
+      <path d="M102,138 Q128,125 154,138 C146,150 110,150 102,138 Z" fill="#FF6B8B"/>
+    </g>
+
+    
+      <g opacity="0.95">
+        <polygon points="32,46 36,56 46,60 36,64 32,74 28,64 18,60 28,56" fill="#FFD100" stroke="#2D0610" stroke-width="2"/>
+        <polygon points="224,46 228,56 238,60 228,64 224,74 220,64 210,60 220,56" fill="#FFD100" stroke="#2D0610" stroke-width="2"/>
+        <circle cx="48" cy="30" r="5" fill="#00F5D4"/>
+        <circle cx="208" cy="30" r="5" fill="#00F5D4"/>
+      </g>
+  </svg>

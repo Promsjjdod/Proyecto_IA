@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" width="920" height="520">
+  <defs>
+    <linearGradient id="woodFrameGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#69381C"/>
+      <stop offset="50%" stop-color="#3D1E0D"/>
+      <stop offset="100%" stop-color="#210E05"/>
+    </linearGradient>
+    <linearGradient id="goldTrimGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF3B0"/>
+      <stop offset="50%" stop-color="#FFD100"/>
+      <stop offset="100%" stop-color="#B65E00"/>
+    </linearGradient>
+    <linearGradient id="reelBgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#051B24" stop-opacity="0.92"/>
+      <stop offset="50%" stop-color="#092C36" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#04151C" stop-opacity="0.94"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Roots & Swamp Branches -->
+  <path d="M36,48 C6,20 4,6 28,12 C52,18 68,36 60,52 Z" fill="#3D1E0D" stroke="#1A0C05" stroke-width="5"/>
+  <path d="M884,48 C914,20 916,6 892,12 C868,18 852,36 860,52 Z" fill="#3D1E0D" stroke="#1A0C05" stroke-width="5"/>
+  <path d="M36,472 C6,500 4,514 28,508 C52,502 68,484 60,468 Z" fill="#3D1E0D" stroke="#1A0C05" stroke-width="5"/>
+  <path d="M884,472 C914,500 916,514 892,508 C868,502 852,484 860,468 Z" fill="#3D1E0D" stroke="#1A0C05" stroke-width="5"/>
+
+  <!-- Main Dark Wood Outer Frame -->
+  <rect x="20" y="20" width="880" height="480" rx="36" fill="url(#woodFrameGrad)" stroke="#1A0C05" stroke-width="8"/>
+  <rect x="32" y="32" width="856" height="456" rx="28" fill="none" stroke="url(#goldTrimGrad)" stroke-width="5"/>
+
+  <!-- Inner Reel Cavern (5x3 Grid Area: x=46..874, y=46..474 -> 828x428) -->
+  <rect x="46" y="46" width="828" height="428" rx="20" fill="url(#reelBgGrad)" stroke="#00F5D4" stroke-width="3" stroke-opacity="0.65"/>
+
+  <!-- 4 Vertical Illuminated Reel Separators (using rects so gradient renders crisply) -->
+  <g opacity="0.92">
+    <rect x="208.6" y="48" width="6" height="424" rx="3" fill="url(#goldTrimGrad)" stroke="#1A0C05" stroke-width="1.5"/>
+    <rect x="374.2" y="48" width="6" height="424" rx="3" fill="url(#goldTrimGrad)" stroke="#1A0C05" stroke-width="1.5"/>
+    <rect x="539.8" y="48" width="6" height="424" rx="3" fill="url(#goldTrimGrad)" stroke="#1A0C05" stroke-width="1.5"/>
+    <rect x="705.4" y="48" width="6" height="424" rx="3" fill="url(#goldTrimGrad)" stroke="#1A0C05" stroke-width="1.5"/>
+    <!-- Glowing Cyan Center Threads on Dividers -->
+    <rect x="210.6" y="56" width="2" height="408" fill="#00F5D4" opacity="0.7"/>
+    <rect x="376.2" y="56" width="2" height="408" fill="#00F5D4" opacity="0.7"/>
+    <rect x="541.8" y="56" width="2" height="408" fill="#00F5D4" opacity="0.7"/>
+    <rect x="707.4" y="56" width="2" height="408" fill="#00F5D4" opacity="0.7"/>
+  </g>
+
+  <!-- Horizontal Subtle Row Guides -->
+  <g opacity="0.22" fill="#00F5D4">
+    <rect x="50" y="188" width="820" height="2"/>
+    <rect x="50" y="330" width="820" height="2"/>
+  </g>
+
+  <!-- Swamp Vines, Mossy Roots & Metallic Rivets along the Frame -->
+  <g stroke="#1A0C05" stroke-width="4" stroke-linejoin="round">
+    <path d="M120,20 C160,8 210,12 250,24 C210,32 160,30 120,20 Z" fill="#29D844"/>
+    <path d="M670,20 C710,8 760,12 800,24 C760,32 710,30 670,20 Z" fill="#29D844"/>
+    <path d="M140,500 C180,512 230,508 270,496 C230,488 180,490 140,500 Z" fill="#29D844"/>
+    <path d="M650,500 C690,512 740,508 780,496 C740,488 690,490 650,500 Z" fill="#29D844"/>
+    <!-- Bronze/Gold Swamp Rivets -->
+    <circle cx="211.6" cy="30" r="6" fill="#FFD100"/>
+    <circle cx="377.2" cy="30" r="6" fill="#FFD100"/>
+    <circle cx="542.8" cy="30" r="6" fill="#FFD100"/>
+    <circle cx="708.4" cy="30" r="6" fill="#FFD100"/>
+    <circle cx="211.6" cy="490" r="6" fill="#FFD100"/>
+    <circle cx="377.2" cy="490" r="6" fill="#FFD100"/>
+    <circle cx="542.8" cy="490" r="6" fill="#FFD100"/>
+    <circle cx="708.4" cy="490" r="6" fill="#FFD100"/>
+  </g>
+
+  <!-- Corner Tropical Leaves & Glowing Gems -->
+  <g stroke="#1A0C05" stroke-width="4">
+    <path d="M18,76 C-4,44 26,10 66,22 C48,44 36,60 18,76 Z" fill="#38E54D"/>
+    <path d="M902,76 C924,44 894,10 854,22 C872,44 884,60 902,76 Z" fill="#38E54D"/>
+    <path d="M18,444 C-4,476 26,510 66,498 C48,476 36,460 18,444 Z" fill="#38E54D"/>
+    <path d="M902,444 C924,476 894,510 854,498 C872,476 884,460 902,444 Z" fill="#38E54D"/>
+    <circle cx="42" cy="42" r="10" fill="#00F5D4"/>
+    <circle cx="878" cy="42" r="10" fill="#00F5D4"/>
+    <circle cx="42" cy="478" r="10" fill="#00F5D4"/>
+    <circle cx="878" cy="478" r="10" fill="#00F5D4"/>
+  </g>
+</svg>

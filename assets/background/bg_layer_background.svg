@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <defs>
+    <linearGradient id="skySwamp" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#071E26"/>
+      <stop offset="45%" stop-color="#0B4F5C"/>
+      <stop offset="100%" stop-color="#00A8E8"/>
+    </linearGradient>
+    <radialGradient id="sunGlow" cx="50%" cy="22%" r="45%">
+      <stop offset="0%" stop-color="#FFF3B0" stop-opacity="0.75"/>
+      <stop offset="50%" stop-color="#00F5D4" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#071E26" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#skySwamp)"/>
+  <circle cx="640" cy="160" r="460" fill="url(#sunGlow)"/>
+  <!-- Distant Swamp Canopy Silhouettes -->
+  <path d="M0,380 Q180,310 340,360 T720,350 T1080,365 T1280,340 L1280,720 L0,720 Z" fill="#062930" opacity="0.6"/>
+</svg>

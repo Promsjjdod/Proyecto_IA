@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- Glowing Lilypads & Lotus Flowers on Water -->
+  <g opacity="0.92">
+    <ellipse cx="140" cy="590" rx="95" ry="32" fill="#29D844" stroke="#0A2910" stroke-width="5"/>
+    <ellipse cx="1140" cy="585" rx="95" ry="32" fill="#29D844" stroke="#0A2910" stroke-width="5"/>
+    <ellipse cx="240" cy="660" rx="75" ry="25" fill="#38E54D" stroke="#0A2910" stroke-width="4"/>
+    <ellipse cx="1040" cy="655" rx="75" ry="25" fill="#38E54D" stroke="#0A2910" stroke-width="4"/>
+  </g>
+</svg>

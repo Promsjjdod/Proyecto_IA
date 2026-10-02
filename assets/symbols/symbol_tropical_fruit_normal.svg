@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+      <defs>
+        <linearGradient id="woodTileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#7A4424"/>
+          <stop offset="50%" stop-color="#4E2A14"/>
+          <stop offset="100%" stop-color="#2B1508"/>
+        </linearGradient>
+        <linearGradient id="lilyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#80FF72"/>
+          <stop offset="100%" stop-color="#18A558"/>
+        </linearGradient>
+        <radialGradient id="frogSymGrad" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFF3B0"/>
+          <stop offset="55%" stop-color="#FFD100"/>
+          <stop offset="100%" stop-color="#D97706"/>
+        </radialGradient>
+        
+        
+      </defs>
+
+      <g opacity="1">
+        
+        
+        
+        <!-- Exotic Glowing Star-Dragonfruit -->
+        <ellipse cx="100" cy="110" rx="52" ry="58" fill="#FF2A6D" stroke="#1A0C05" stroke-width="6.5"/>
+        <ellipse cx="100" cy="114" rx="38" ry="42" fill="#FFF8D6" stroke="#1A0C05" stroke-width="4"/>
+        <!-- Seeds -->
+        <circle cx="88" cy="100" r="3.5" fill="#1A0C05"/>
+        <circle cx="112" cy="102" r="3.5" fill="#1A0C05"/>
+        <circle cx="100" cy="116" r="3.5" fill="#1A0C05"/>
+        <circle cx="86" cy="128" r="3.5" fill="#1A0C05"/>
+        <circle cx="114" cy="126" r="3.5" fill="#1A0C05"/>
+        <!-- Tropical Crown Leaves -->
+        <path d="M100,52 L80,26 L98,40 L100,20 L106,40 L124,26 Z" fill="#38E54D" stroke="#1A0C05" stroke-width="5" stroke-linejoin="round"/>
+      
+      </g>
+    </svg>

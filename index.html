@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>TINY TOADS — Tropical Swamp Arcade Demo</title>
+    <link rel="icon" type="image/png" href="assets/logo/favicon.png" />
+    <link rel="stylesheet" href="src/styles/main.css" />
+  </head>
+  <body>
+    <main id="game-viewport" class="game-viewport">
+      <!-- 1280x720 Master Scalable Stage -->
+      <section id="game-stage" class="game-stage" aria-label="TINY TOADS Arcade Slot Machine Demo">
+        <!-- 1. PARALLAX ANIMATED SWAMP BACKGROUND LAYERS -->
+        <div class="bg-parallax-container" aria-hidden="true">
+          <img
+            src="assets/background/swamp_background.png"
+            alt=""
+            class="bg-layer bg-layer-painted"
+          />
+          <img
+            src="assets/background/bg_layer_midground.png"
+            alt=""
+            class="bg-layer bg-layer-midground"
+          />
+          <img
+            src="assets/background/water_overlay.png"
+            alt=""
+            class="bg-layer bg-layer-water"
+          />
+          <img
+            src="assets/background/bg_layer_foreground.png"
+            alt=""
+            class="bg-layer bg-layer-foreground"
+          />
+        </div>
+
+        <!-- 2. POOLED PARTICLE ENGINE CANVAS -->
+        <canvas id="swamp-particles" width="1280" height="720"></canvas>
+
+        <!-- 3. TOP HUD: LOGO + 4 JACKPOT PANELS (GRAND, MAJOR, MINOR, MINI) -->
+        <header class="top-hud">
+          <div class="brand-logo-wrap">
+            <img
+              src="assets/logo/tiny_toads_logo_full.png"
+              alt="TINY TOADS Logo"
+              class="brand-logo-img"
+            />
+          </div>
+
+          <div class="jackpots-bar" role="region" aria-label="Niveles de Premio Virtual">
+            <div class="jackpot-card jp-grand">
+              <div class="jp-header">👑 GRAND</div>
+              <div id="jp-val-grand" class="jp-number">50,000</div>
+            </div>
+            <div class="jackpot-card jp-major">
+              <div class="jp-header">⭐ MAJOR</div>
+              <div id="jp-val-major" class="jp-number">10,000</div>
+            </div>
+            <div class="jackpot-card jp-minor">
+              <div class="jp-header">💎 MINOR</div>
+              <div id="jp-val-minor" class="jp-number">2,500</div>
+            </div>
+            <div class="jackpot-card jp-mini">
+              <div class="jp-header">🍀 MINI</div>
+              <div id="jp-val-mini" class="jp-number">500</div>
+            </div>
+          </div>
+
+          <div class="top-right-meta">
+            <span class="fictional-demo-pill" title="Juego ficticio sin apuestas reales">
+              🎮 DEMO • CRÉDITOS VIRTUALES
+            </span>
+            <span id="visual-sound-badge" class="visual-sound-badge">
+              ✨ PANTANO LISTO
+            </span>
+          </div>
+        </header>
+
+        <!-- 4. CENTER ARENA: 5 ORIGINAL TINY TOADS + 5x3 REEL MACHINE -->
+        <section class="center-stage-arena">
+          <!-- 5 Interactive Tiny Toads on Lilypads -->
+          <div id="toads-stage-layer" class="toads-stage-layer"></div>
+
+          <!-- 5x3 Swamp Wood Reel Machine -->
+          <div class="reel-machine-container">
+            <div id="reel-status-banner" class="reel-status-banner">
+              ¡BIENVENIDO AL PANTANO MÁGICO DE TINY TOADS!
+            </div>
+
+            <div class="reels-viewport">
+              <div id="reels-grid" class="reels-grid"></div>
+              <svg
+                id="paylines-svg"
+                class="paylines-svg"
+                viewBox="0 0 920 520"
+                preserveAspectRatio="none"
+              ></svg>
+            </div>
+
+            <img
+              src="assets/reels/reel_frame.png"
+              alt="Marco de Madera del Pantano 5x3"
+              class="reel-frame-art"
+            />
+          </div>
+        </section>
+
+        <!-- 5. DEMO DIRECTOR QUICK-TRIGGER BAR (Instant preview of win tiers) -->
+        <div class="director-demo-bar" aria-label="Controles de Prueba de Victoria">
+          <span>PROBAR:</span>
+          <button type="button" class="btn-demo-chip" data-demo-trigger="SMALL">
+            Small Win
+          </button>
+          <button type="button" class="btn-demo-chip" data-demo-trigger="MEDIUM">
+            Medium Win
+          </button>
+          <button type="button" class="btn-demo-chip chip-big" data-demo-trigger="BIG">
+            Big Win
+          </button>
+          <button type="button" class="btn-demo-chip chip-mega" data-demo-trigger="MEGA">
+            Mega Win
+          </button>
+          <button type="button" class="btn-demo-chip" data-demo-trigger="REFILL">
+            +5,000 Créditos
+          </button>
+        </div>
+
+        <!-- 6. BOTTOM ARCADE HUD & CONTROLS -->
+        <footer class="bottom-hud">
+          <!-- Left: Virtual Credits & Virtual Bet -->
+          <div class="hud-group-left">
+            <div class="hud-stat-panel">
+              <span class="hud-stat-label">🪙 CRÉDITOS VIRTUALES</span>
+              <span id="hud-credits-value" class="hud-stat-value">10,000</span>
+            </div>
+
+            <div class="hud-stat-panel bet-adjuster-panel">
+              <button
+                type="button"
+                id="btn-bet-minus"
+                class="btn-step"
+                aria-label="Reducir apuesta virtual"
+              >
+                −
+              </button>
+              <div>
+                <span class="hud-stat-label">🎯 APUESTA</span>
+                <span id="hud-bet-value" class="hud-stat-value">50</span>
+              </div>
+              <button
+                type="button"
+                id="btn-bet-plus"
+                class="btn-step"
+                aria-label="Aumentar apuesta virtual"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <!-- Center: Hero Circular SPIN Button + AUTO -->
+          <div class="spin-cluster">
+            <button
+              type="button"
+              id="btn-spin"
+              class="btn-spin-hero"
+              data-state="idle"
+              aria-label="GIRAR REELS (SPIN)"
+            >
+              <img
+                id="btn-spin-img"
+                src="assets/buttons/spin_button_idle.png"
+                alt="SPIN"
+              />
+            </button>
+
+            <button
+              type="button"
+              id="btn-auto"
+              class="btn-arcade-pill"
+              aria-pressed="false"
+            >
+              AUTO
+            </button>
+          </div>
+
+          <!-- Right: Last Win + Art Gallery + Paytable Info + Settings + Sound + Music -->
+          <div class="hud-group-right">
+            <div class="hud-stat-panel">
+              <span class="hud-stat-label">🏆 VICTORIA</span>
+              <span id="hud-win-value" class="hud-stat-value">0</span>
+            </div>
+
+            <button
+              type="button"
+              id="btn-gallery"
+              class="btn-arcade-pill"
+              title="Inspeccionar todos los Personajes, Símbolos y Logos generados"
+            >
+              🎨 ASSETS
+            </button>
+
+            <button
+              type="button"
+              id="btn-info"
+              class="btn-icon-round"
+              title="Tabla de Premios e Información"
+              aria-label="Información"
+            >
+              <img src="assets/icons/icon_info.png" alt="Info" />
+            </button>
+
+            <button
+              type="button"
+              id="btn-settings"
+              class="btn-icon-round"
+              title="Ajustes"
+              aria-label="Ajustes"
+            >
+              <img src="assets/icons/icon_settings.png" alt="Ajustes" />
+            </button>
+
+            <button
+              type="button"
+              id="btn-sound"
+              class="btn-icon-round"
+              title="Efectos de Sonido"
+              aria-label="Sonido"
+            >
+              <img src="assets/icons/icon_sound_on.png" alt="Sonido" />
+            </button>
+
+            <button
+              type="button"
+              id="btn-music"
+              class="btn-icon-round muted"
+              title="Música Ambiental"
+              aria-label="Música"
+            >
+              <img src="assets/icons/icon_music_off.png" alt="Música" />
+            </button>
+          </div>
+        </footer>
+
+        <!-- 7. BIG WIN / MEGA WIN FULLSCREEN CELEBRATION OVERLAY -->
+        <div id="win-celebration-overlay" class="win-celebration-overlay" hidden>
+          <img
+            src="assets/effects/win_rays_burst.png"
+            alt=""
+            class="win-rays-bg"
+          />
+          <h2 id="win-tier-title" class="win-tier-title">MEGA WIN!</h2>
+          <p id="win-tier-subtitle" class="win-tier-subtitle">
+            ¡Los Tiny Toads celebran tu fortuna virtual!
+          </p>
+          <div id="win-tier-amount" class="win-tier-amount">+2,500 CRÉDITOS</div>
+          <div id="win-overlay-toads" class="win-overlay-toads"></div>
+          <button
+            type="button"
+            id="btn-close-win-overlay"
+            class="btn-arcade-pill"
+            style="margin-top: 10px"
+          >
+            ¡CONTINUAR!
+          </button>
+        </div>
+
+        <!-- 8. MODAL: PAYTABLE & GAME INFO -->
+        <div id="modal-paytable" class="arcade-modal" hidden>
+          <div class="modal-card">
+            <div class="modal-header">
+              <h2>📜 TABLA DE PREMIOS VIRTUALES — TINY TOADS</h2>
+              <button
+                type="button"
+                class="btn-arcade-pill"
+                data-close-modal="modal-paytable"
+              >
+                CERRAR ✖
+              </button>
+            </div>
+            <div class="modal-body">
+              <p>
+                <strong>DEMO EDUCATIVA / VIDEOJUEGO FICTICIO:</strong> Todos los
+                valores son exclusivamente créditos virtuales de entretenimiento.
+                Tablero de <strong>5 columnas × 3 filas</strong> con 15 líneas de
+                premio y símbolos especiales del pantano.
+              </p>
+              <div id="paytable-symbols-grid" class="paytable-symbols-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 9. MODAL: ART DIRECTOR & 2D ASSET INSPECTOR GALLERY -->
+        <div id="modal-gallery" class="arcade-modal" hidden>
+          <div class="modal-card">
+            <div class="modal-header">
+              <h2>🎨 CATÁLOGO DE IDENTIDAD VISUAL & ASSETS ORIGINALES</h2>
+              <button
+                type="button"
+                class="btn-arcade-pill"
+                data-close-modal="modal-gallery"
+              >
+                CERRAR ✖
+              </button>
+            </div>
+            <div class="modal-body">
+              <h3 class="gallery-section-title">
+                1. Familia de Personajes: 5 Tiny Toads × 7 Estados (idle, blink, happy, excited, win, jump, shocked)
+              </h3>
+              <div id="gallery-toads-grid" class="gallery-toads-grid"></div>
+
+              <h3 class="gallery-section-title">
+                2. Símbolos Originales del Reel (19 Símbolos × Estados: normal, highlighted, winning, disabled)
+              </h3>
+              <div id="gallery-symbols-grid" class="gallery-symbols-grid"></div>
+
+              <h3 class="gallery-section-title">
+                3. Variantes del Logo "TINY TOADS" & Arte de Fondo
+              </h3>
+              <div id="gallery-logos-grid" class="gallery-logos-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 10. MODAL: SETTINGS -->
+        <div id="modal-settings" class="arcade-modal" hidden>
+          <div class="modal-card" style="max-width: 620px">
+            <div class="modal-header">
+              <h2>⚙ AJUSTES DEL JUEGO ARCADE</h2>
+              <button
+                type="button"
+                class="btn-arcade-pill"
+                data-close-modal="modal-settings"
+              >
+                CERRAR ✖
+              </button>
+            </div>
+            <div class="modal-body">
+              <p>
+                <strong>Resolución Nativa:</strong> 1280×720 (Escalable
+                automáticamente a 1920×1080, 1366×768, Tablet y Móvil Horizontal).
+              </p>
+              <p>
+                <strong>Atajos de Teclado:</strong> Presiona <code>ESPACIO</code>
+                para girar los reels. Haz clic sobre cualquiera de los 5 Tiny Toads
+                en el escenario para ver sus expresiones y partículas mágicas.
+              </p>
+              <p>
+                <strong>Aviso Importante:</strong> TINY TOADS es una demostración
+                visual y técnica ficticia. Utiliza únicamente créditos virtuales.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="src/js/bundle.js"></script>
+  </body>
+</html>
