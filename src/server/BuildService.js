@@ -64,6 +64,8 @@ const BROWSER_ALIASES = {
 /** Extra entry points built next to `app.js` (real worker bundles). */
 const EXTRA_ENTRY_POINTS = [
   { entry: 'runtime/workers/lua54.worker.js', output: 'lua54.worker.js' },
+  // Isolated host for plugins: a real module worker, loaded by `PluginHost`.
+  { entry: 'plugins/plugin.worker.js', output: 'plugin.worker.js' },
 ];
 
 export class BuildService {

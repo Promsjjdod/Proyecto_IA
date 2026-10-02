@@ -23,7 +23,7 @@ import {
   defaultKeymap, history, historyKeymap, indentWithTab, undo, redo, toggleComment, deleteLine,
   copyLineDown, moveLineUp, moveLineDown, selectAll, indentMore, indentLess,
 } from '@codemirror/commands';
-import { bracketMatching, foldGutter, foldKeymap, foldAll, unfoldAll, syntaxHighlighting } from '@codemirror/language';
+import { bracketMatching, foldGutter, foldKeymap, foldAll, unfoldAll, syntaxHighlighting, indentUnit } from '@codemirror/language';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, completionStatus, startCompletion } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches, selectSelectionMatches, selectNextOccurrence as searchSelectNextOccurrence } from '@codemirror/search';
 import { linter, lintGutter, lintKeymap, forceLinting } from '@codemirror/lint';
@@ -34,6 +34,7 @@ import { buildAppearanceExtensions, buildEditorTheme } from './editor-theme.js';
 import { AnalysisClient, offsetToPosition } from './AnalysisClient.js';
 import { SearchManager } from './SearchManager.js';
 import { Formatter } from './Formatter.js';
+import { CompletionManager } from './CompletionManager.js';
 import { Minimap } from './Minimap.js';
 
 const ZOOM_MIN = 8;
@@ -71,9 +72,14 @@ export class EditorManager {
     this.eventBus = eventBus;
     this.errorBus = errorBus;
     this.notifications = notifications;
-    this.completion = completion;
-    this.search = search ?? new SearchManager({ logger, errorBus, apiClient: analysis?.apiClient });
-    this.formatter = formatter ?? new Formatter({ settings, logger });
+    // Los colaboradores se guardan en los campos privados que usa la clase y se exponen como
+    // propiedades públicas para las vistas y el `describe()`.
+    this.#completion = completion ?? new CompletionManager({ analysis, settings, logger });
+    this.#search = search ?? new SearchManager({ logger, errorBus, apiClient: analysis?.apiClient });
+    this.#formatter = formatter ?? new Formatter({ settings, logger });
+    this.completion = this.#completion;
+    this.search = this.#search;
+    this.formatter = this.#formatter;
     this.stats = { opened: 0, saved: 0, formats: 0, diagnosticRuns: 0, diagnosticErrors: 0, lastDiagnosticsAt: null, activeView: false };
   }
 
@@ -117,7 +123,7 @@ export class EditorManager {
     this.#baseExtensions = [
       ...core,
       luaLanguage,
-      ...(autoIndent ? [] : [EditorState.indentUnit.of('')]),
+      ...(autoIndent ? [] : [indentUnit.of('')]),
       this.#features.of(this.#featureExtensions()),
       this.#highlight.of(this.#highlightExtension()),
       this.#theme.of(buildEditorTheme({ dark: this.themeManager?.active?.type !== 'light' })),
@@ -741,8 +747,17 @@ export class EditorManager {
     return { ok: true, decorated: result.decorated, changed: result.changed === true };
   }
 
-  diagnosticsFor(id = this.#activeId) {
+  /**
+   * Estado completo del análisis del documento: diagnósticos y motivo real de indisponibilidad.
+   * @returns {{ diagnostics: Array, unavailable: boolean, reason: string|null }}
+   */
+  diagnosticsState(id = this.#activeId) {
     return this.#diagnostics.get(id) ?? { diagnostics: [], unavailable: !this.analysis.supported, reason: this.analysis.reason };
+  }
+
+  /** Diagnósticos del documento como lista plana; es lo que consumen las vistas. */
+  diagnosticsFor(id = this.#activeId) {
+    return this.diagnosticsState(id).diagnostics ?? [];
   }
 
   /* ------------------------------------------------------------------ *
@@ -882,6 +897,9 @@ export class EditorManager {
   zoomIn() { return this.#zoom(1); }
   zoomOut() { return this.#zoom(-1); }
   zoomReset() { return this.#setZoom(DEFAULT_FONT_SIZE); }
+
+  /** Sets an exact font size (used by Ctrl+wheel, the layout restore and the settings slider). */
+  setZoom(value) { return this.#setZoom(value); }
 
   #zoom(delta) {
     const current = this.settings?.get('editor.fontSize') ?? DEFAULT_FONT_SIZE;

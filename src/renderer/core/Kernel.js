@@ -11,6 +11,7 @@ export class Kernel {
   #order = [];
   #booted = false;
   #booting = null;
+  #shutdownPromise = null;
   #progressListeners = new Set();
 
   constructor({ label = 'Kernel' } = {}) {
@@ -34,6 +35,7 @@ export class Kernel {
       label: options.label ?? name,
       critical: options.critical === true,
       initialized: false,
+      disposed: false,
     });
     this.#order.push(name);
     return instance;
@@ -84,7 +86,14 @@ export class Kernel {
               ok: false,
               durationMs,
               critical: entry.critical,
-              error: { message: err?.message ?? String(err), code: err?.code ?? null, kind: err?.kind ?? null, detail: err?.detail ?? null },
+              error: {
+                message: err?.message ?? String(err),
+                code: err?.code ?? null,
+                kind: err?.kind ?? null,
+                detail: err?.detail ?? null,
+                // El stack real se conserva: sin él un fallo de arranque es indepurable.
+                stack: typeof err?.stack === 'string' ? err.stack : null,
+              },
             };
             report.push(step);
             onProgress?.(step);
@@ -118,21 +127,43 @@ export class Kernel {
     }
   }
 
-  /** Disposes services in reverse order (real cleanup, errors are collected). */
+  /**
+   * Disposes services in reverse order (real cleanup, errors are collected).
+   *
+   * Es reentrante por diseño: `App.dispose()` está registrado como servicio `ui` y a su vez pide
+   * al kernel que se apague, por lo que sin esta guarda la llamada se llamaría a sí misma sin
+   * fin. Cada servicio se libera exactamente una vez y las llamadas simultáneas comparten el
+   * mismo resultado.
+   */
   async shutdown() {
-    const results = [];
-    for (const name of [...this.#order].reverse()) {
-      const entry = this.#services.get(name);
-      if (typeof entry.instance?.dispose !== 'function') continue;
-      try {
-        await entry.instance.dispose();
-        results.push({ name, ok: true });
-      } catch (err) {
-        results.push({ name, ok: false, message: err?.message ?? String(err) });
+    if (this.#shutdownPromise) return this.#shutdownPromise;
+
+    this.#shutdownPromise = (async () => {
+      const results = [];
+      for (const name of [...this.#order].reverse()) {
+        const entry = this.#services.get(name);
+        if (typeof entry.instance?.dispose !== 'function') continue;
+        if (entry.disposed) {
+          results.push({ name, ok: true, skipped: 'ya liberado' });
+          continue;
+        }
+        entry.disposed = true;
+        try {
+          await entry.instance.dispose();
+          results.push({ name, ok: true });
+        } catch (err) {
+          results.push({ name, ok: false, message: err?.message ?? String(err) });
+        }
       }
+      this.#booted = false;
+      return results;
+    })();
+
+    try {
+      return await this.#shutdownPromise;
+    } finally {
+      this.#shutdownPromise = null;
     }
-    this.#booted = false;
-    return results;
   }
 
   onProgress(listener) {
@@ -148,6 +179,11 @@ export class Kernel {
         /* a broken progress listener must not break boot */
       }
     }
+  }
+
+  /** `true` mientras se está ejecutando `shutdown()`. */
+  get isShuttingDown() {
+    return this.#shutdownPromise !== null;
   }
 
   /** Description of every registered service (About/Diagnostics view). */

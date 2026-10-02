@@ -46,5 +46,8 @@
     "runtime",
     "codemirror"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^30.1.1"
+  }
 }

@@ -35,6 +35,8 @@ export class RuntimeManager {
   #subscribers = new Set();
   #disposers = [];
   #serverEngineSource = 'unavailable';
+  /** Salidas ya entregadas por SSE por ejecución, para no duplicarlas al recibir el resultado. */
+  #deliveredOutputs = new Map();
 
   constructor({ apiClient, capabilities, settings, logger, eventBus, notifications, errorBus, eventStream }) {
     this.apiClient = apiClient;
@@ -415,7 +417,20 @@ export class RuntimeManager {
         origin: this.#active?.origin ?? 'user',
       }, { signal: controller.signal, timeoutMs: Math.max(10_000, (options.timeoutMs ?? 5000) + 20_000) });
       const execution = payload.execution ?? {};
-      for (const entry of execution.outputs ?? []) outputs.push(entry);
+      const entries = execution.outputs ?? [];
+      /**
+       * El flujo SSE normal entrega la salida en vivo mientras el script se ejecuta. Si no está
+       * disponible (navegador sin `EventSource`, conexión caída o reconexión en curso) la salida
+       * se publica aquí, de modo que la consola nunca se queda sin el resultado real.
+       */
+      const delivered = this.#deliveredOutputs.get(executionId) ?? 0;
+      for (let index = 0; index < entries.length; index += 1) {
+        outputs.push(entries[index]);
+        if (index >= delivered && entries[index]?.text) {
+          this.eventBus?.emit('runtime:output', { executionId, ...entries[index] });
+        }
+      }
+      this.#deliveredOutputs.delete(executionId);
       return {
         ok: execution.ok === true,
         state: execution.state ?? RuntimeState.ERROR,
@@ -456,6 +471,7 @@ export class RuntimeManager {
     if (!this.eventStream) return;
     const onOutput = (payload) => {
       if (!payload?.executionId) return;
+      this.#deliveredOutputs.set(payload.executionId, (this.#deliveredOutputs.get(payload.executionId) ?? 0) + 1);
       this.eventBus?.emit('runtime:output', payload);
     };
     for (const event of [SseEvent.RUNTIME_OUTPUT, SseEvent.RUNTIME_STARTED, SseEvent.RUNTIME_FINISHED, SseEvent.RUNTIME_CANCEL_REQUESTED]) {

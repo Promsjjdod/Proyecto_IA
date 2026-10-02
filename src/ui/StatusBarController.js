@@ -8,8 +8,8 @@
  */
 
 import { DialectInfo, RuntimeState, SseEvent } from '../shared/constants.js';
-import { el, replace, setActive } from '../utils/dom.js';
-import { formatDuration, formatTime } from '../utils/format.js';
+import { el, replace, setActive } from '../renderer/utils/dom.js';
+import { formatDuration, formatTime } from '../renderer/utils/format.js';
 
 export class StatusBarController {
   #segments = {};
@@ -18,6 +18,8 @@ export class StatusBarController {
   #lastExecution = null;
   #connectionState = 'unknown';
   #unsubscribers = [];
+  #pluginHost = null;
+  #pluginItems = new Map();
 
   constructor({ host, runtimeController, tabsController, notifications, eventStream, logger, editorManager, settings, capabilities, windowController }) {
     this.host = host;
@@ -109,6 +111,10 @@ export class StatusBarController {
       ]),
     };
 
+    // Plugins publish real items here (permission `statusbar`); the controller owns the DOM.
+    this.#pluginHost = el('div.status-bar__group.status-bar__group--plugins', { attrs: { 'aria-label': 'Indicadores de plugins' } });
+    this.#pluginItems = new Map();
+
     const left = el('div.status-bar__group.status-bar__group--left', null, [
       this.#segments.runtime,
       this.#segments.engine,
@@ -126,7 +132,7 @@ export class StatusBarController {
       this.#segments.clock,
     ]);
 
-    replace(this.#host, [left, right]);
+    replace(this.#host, [left, this.#pluginHost, el('div.status-bar__spacer'), right]);
   }
 
   #subscribe() {
@@ -140,6 +146,44 @@ export class StatusBarController {
     this.eventStream?.on(SseEvent.RUNTIME_STARTED, () => this.updateRuntime({ state: RuntimeState.RUNNING }));
     this.eventStream?.on(SseEvent.CAPABILITIES, () => this.updateStorage());
     this.#unsubscribers.push(this.eventStream?.subscribeState?.((state) => this.updateConnection(state)) ?? (() => {}));
+  }
+
+  /**
+   * Adds or replaces a status item contributed by a plugin.
+   * @param {string} pluginId
+   * @param {{ id: string, text: string, tooltip?: string|null, severity?: string }} item
+   */
+  setPluginItem(pluginId, item) {
+    if (!this.#pluginHost) return { ok: false, reason: 'la barra de estado aún no está montada' };
+    const key = `${pluginId}:${item.id}`;
+    let node = this.#pluginItems.get(key);
+    if (!node) {
+      node = el('button.status-segment.status-segment--action', {
+        attrs: { type: 'button' },
+        on: { click: () => this.notifications?.info(`${item.text} — plugin «${pluginId}»`, { durationMs: 3000 }) },
+      }, [el('span.status-segment__value', { text: item.text })]);
+      this.#pluginItems.set(key, node);
+      this.#pluginHost.appendChild(node);
+    }
+    node.dataset.severity = item.severity ?? 'info';
+    node.dataset.plugin = pluginId;
+    node.title = item.tooltip ?? item.text;
+    node.querySelector('.status-segment__value').textContent = item.text;
+    return { ok: true, items: this.#pluginItems.size };
+  }
+
+  /** Removes a plugin status item (or every item of a plugin when `id` is omitted). */
+  removePluginItem(pluginId, id = null) {
+    const prefix = id === null ? `${pluginId}:` : `${pluginId}:${id}`;
+    let removed = 0;
+    for (const [key, node] of [...this.#pluginItems]) {
+      if (id === null ? key.startsWith(prefix) : key === prefix) {
+        node.remove();
+        this.#pluginItems.delete(key);
+        removed += 1;
+      }
+    }
+    return { ok: true, removed };
   }
 
   /** Runtime state segment (colour comes from the theme via `data-state`). */

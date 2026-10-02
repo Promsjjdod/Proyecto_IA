@@ -8,6 +8,7 @@
 
 import { EditorView } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
+import { indentUnit } from '@codemirror/language';
 
 /** Structural + colour theme for the editor surface. */
 export function buildEditorTheme({ dark = true } = {}) {
@@ -186,7 +187,7 @@ export function buildAppearanceExtensions({
   return [
     theme,
     EditorState.tabSize.of(tabSize),
-    EditorState.indentUnit.of(insertSpaces ? ' '.repeat(tabSize) : '\t'),
+    indentUnit.of(insertSpaces ? ' '.repeat(tabSize) : '\t'),
     wordWrap ? EditorView.lineWrapping : [],
   ];
 }

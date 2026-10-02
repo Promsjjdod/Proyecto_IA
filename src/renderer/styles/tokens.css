@@ -1,0 +1,367 @@
+/**
+ * Tokens, reset and typography.
+ *
+ * Every colour in the interface comes from a `--<token>` custom property written on `:root` by
+ * the ThemeManager (see `src/shared/themes.js`). The block below only provides the *initial* values (identical to the default
+ * dark theme) so the boot screen —which is painted before the JavaScript starts— already looks
+ * right; from the moment the app boots, the ThemeManager replaces all of them.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Layout metrics (not theme colours: they never change with the theme). */
+  --topbar-height: 44px;
+  --statusbar-height: 26px;
+  --sidebar-width: 208px;
+  --sidebar-width-compact: 52px;
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 11px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --transition-fast: 110ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Superficies */
+  --bg-app: #0e1116;
+  --bg-panel: #151a21;
+  --bg-elevated: #1b222b;
+  --bg-input: #11161d;
+  --bg-hover: #1f2732;
+  --bg-active: #26303d;
+  --bg-selected: #1d2b3a;
+  --bg-overlay: rgba(6, 9, 13, 0.66);
+  --bg-code: #0b0f14;
+
+  /* Bordes */
+  --border-subtle: #1e2836;
+  --border-default: #2a3644;
+  --border-strong: #3b4a5c;
+  --border-focus: #3d7dd8;
+
+  /* Texto */
+  --text-primary: #e6edf3;
+  --text-secondary: #b3c0cd;
+  --text-muted: #7c8896;
+  --text-disabled: #556070;
+  --text-inverse: #0b0f14;
+  --text-link: #6cb2ff;
+
+  /* Acento */
+  --accent: #3d7dd8;
+  --accent-hover: #4d8de8;
+  --accent-active: #2f6ec4;
+  --accent-subtle: rgba(61, 125, 216, 0.16);
+  --accent-contrast: #ffffff;
+
+  /* Estados */
+  --success: #3fb950;
+  --success-bg: rgba(63, 185, 80, 0.14);
+  --warning: #d29922;
+  --warning-bg: rgba(210, 153, 34, 0.15);
+  --error: #f0554a;
+  --error-bg: rgba(240, 85, 74, 0.15);
+  --info: #58a6ff;
+  --info-bg: rgba(88, 166, 255, 0.14);
+
+  /* Resaltado de sintaxis */
+  --syn-keyword: #ff7b72;
+  --syn-string: #a5d6ff;
+  --syn-number: #f2cc60;
+  --syn-comment: #7d8794;
+  --syn-function: #d2a8ff;
+  --syn-variable: #e6edf3;
+  --syn-constant: #79c0ff;
+  --syn-type: #7ee787;
+  --syn-property: #ffa657;
+  --syn-operator: #ff7b72;
+  --syn-punctuation: #9aa7b4;
+  --syn-global: #79c0ff;
+  --syn-invalid: #ff5c5c;
+
+  /* Editor */
+  --editor-bg: #0e1116;
+  --editor-gutter-bg: #0e1116;
+  --editor-gutter-text: #4d5866;
+  --editor-active-line: rgba(61, 125, 216, 0.09);
+  --editor-selection: rgba(61, 125, 216, 0.28);
+  --editor-cursor: #6cb2ff;
+  --editor-bracket-match: rgba(110, 168, 254, 0.28);
+  --editor-search-match: rgba(210, 153, 34, 0.28);
+  --editor-search-active: rgba(210, 153, 34, 0.55);
+  --editor-indent-guide: rgba(124, 136, 150, 0.22);
+  --editor-error-line: rgba(240, 85, 74, 0.14);
+  --editor-warning-line: rgba(210, 153, 34, 0.14);
+
+  /* Efectos */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 6px 16px rgba(0, 0, 0, 0.42);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --scrollbar-thumb: rgba(124, 136, 150, 0.34);
+  --scrollbar-thumb-hover: rgba(124, 136, 150, 0.55);
+  --focus-ring: rgba(61, 125, 216, 0.55);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+kbd,
+pre,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+::selection {
+  background: var(--editor-selection, var(--accent-subtle));
+}
+
+/* Scrollbars: themed, thin, and only visible when the area is scrollable. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Focus visibility: a real, visible ring for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* Animations are opt-out: the user preference (and the reduced-motion media query) wins. */
+:root[data-animations='off'] *,
+:root[data-reduced-motion='true'] * {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Performance mode: no blur, no soft shadows (measurably cheaper to paint). */
+:root[data-low-performance='true'] .panel,
+:root[data-low-performance='true'] .menu,
+:root[data-low-performance='true'] .dialog,
+:root[data-low-performance='true'] .notification {
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ----------------------------- Boot screen ----------------------------- */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-app);
+  z-index: 100;
+}
+
+.boot__inner {
+  width: min(420px, 88vw);
+  text-align: center;
+}
+
+.boot__logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-4);
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent-contrast);
+  background: linear-gradient(140deg, var(--accent), var(--accent-active));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+}
+
+.boot__title {
+  font-size: 20px;
+  letter-spacing: 0.2px;
+  margin-bottom: var(--space-2);
+}
+
+.boot__status {
+  color: var(--text-secondary);
+  font-size: 12px;
+  min-height: 18px;
+}
+
+.boot__progress {
+  height: 3px;
+  margin: var(--space-4) 0;
+  background: var(--bg-active);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.boot__bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width var(--transition-base);
+}
+
+.boot__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-height: 180px;
+  overflow: auto;
+}
+
+.boot__steps li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.boot__steps li.is-failed {
+  color: var(--error);
+}
+
+.boot__error {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  text-align: left;
+  font-size: 12px;
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.noscript {
+  padding: var(--space-5);
+  font-size: 14px;
+  color: var(--warning);
+}

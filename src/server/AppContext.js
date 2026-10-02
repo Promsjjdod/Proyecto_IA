@@ -131,7 +131,9 @@ export class AppContext {
       logger: this.logger,
       errorHandler: this.errorHandler,
       bus: this.bus,
-      builtinDir: fs.existsSync(this.builtinPluginsDir) ? this.builtinPluginsDir : null,
+      // The path is always passed: PluginManager checks existence on every load, so plugins
+      // installed (or created) after the server started are found by a rescan.
+      builtinDir: this.builtinPluginsDir,
     });
     this.sse = new SseHub({
       logger: this.logger,

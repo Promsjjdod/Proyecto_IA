@@ -392,13 +392,24 @@ function detectPlatform() {
 export function normalizeBinding(input) {
   if (typeof input !== 'string' || input.trim() === '') return null;
   const raw = input.trim();
-  const parts = raw.split('+').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  // Admite `Ctrl+F when=editor` (cláusula separada por espacio) y `Ctrl+F+context=editor`.
+  const [combination, ...clauses] = raw.split(/\s+/);
+  const parts = combination.split('+').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  let clauseContext = 'global';
+  let clauseWhen = null;
+  for (const clause of clauses) {
+    const [name, ...rest] = clause.split('=');
+    const value = rest.join('=');
+    if (!value) continue;
+    if (name.toLowerCase() === 'when') clauseWhen = value;
+    else if (name.toLowerCase() === 'context') clauseContext = value;
+  }
   if (parts.length === 0) return null;
 
   const modifiers = { ctrl: false, shift: false, alt: false, meta: false };
   let key = null;
-  let context = 'global';
-  let when = null;
+  let context = clauseContext;
+  let when = clauseWhen;
 
   for (const part of parts) {
     if (part.startsWith('when=')) {
@@ -428,7 +439,19 @@ export function normalizeBinding(input) {
 
   if (key === null) return null;
   const canonical = canonicalize({ ...modifiers, key });
-  return { ...modifiers, key, canonical, raw };
+  /**
+   * `context=` y `when=` limitan el atajo a un contexto (por ejemplo `editor`). Sin incluirlos en
+   * el objeto devuelto cada atajo quedaba con `context === undefined` y `handleKeydown` lo
+   * descartaba siempre: ningún atajo llegaba a ejecutarse.
+   */
+  return {
+    ...modifiers,
+    key,
+    canonical,
+    raw,
+    context: context ?? 'global',
+    when: when ? (event, activeContext) => activeContext === when : null,
+  };
 }
 
 function canonicalize({ ctrl, shift, alt, meta, key }) {

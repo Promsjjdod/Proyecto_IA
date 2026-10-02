@@ -10,6 +10,30 @@
 
 import { el, focusFirst, trapFocus } from '../renderer/utils/dom.js';
 
+/**
+ * Accepts every convention used by the call sites:
+ *  • `{ ok, value, message }`      → used as-is
+ *  • `true` / `null` / `undefined` → valid
+ *  • `false`                       → invalid with a generic message
+ *  • non-empty string              → invalid, and the string is the message
+ */
+function normalizeValidation(result, fallbackValue) {
+  if (result === null || result === undefined || result === true) return { ok: true, value: fallbackValue };
+  if (result === false) return { ok: false, message: 'Valor inválido' };
+  if (typeof result === 'string') {
+    if (result.trim() === '') return { ok: true, value: fallbackValue };
+    return { ok: false, message: result };
+  }
+  if (typeof result === 'object') {
+    return {
+      ok: result.ok !== false,
+      value: result.value ?? fallbackValue,
+      message: result.message ?? 'Valor inválido',
+    };
+  }
+  return { ok: true, value: fallbackValue };
+}
+
 export class DialogManager {
   #host = null;
   #open = [];
@@ -84,7 +108,7 @@ export class DialogManager {
       const error = el('div.field__error', { hidden: true });
       const submit = () => {
         const current = input.value;
-        const validation = typeof validate === 'function' ? validate(current) : { ok: true, value: current };
+        const validation = normalizeValidation(typeof validate === 'function' ? validate(current) : null, current);
         if (!validation.ok) {
           error.textContent = validation.message ?? 'Valor inválido';
           error.hidden = false;

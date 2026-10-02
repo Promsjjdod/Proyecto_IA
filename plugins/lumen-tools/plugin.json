@@ -1,0 +1,31 @@
+{
+  "id": "lumen-tools",
+  "name": "Herramientas de Lumen",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Lumen Studio",
+  "description": "Utilidades de trabajo diario: inserta una cabecera Luau, informa del estado real de la sesión y alterna el ajuste de línea desde la paleta de comandos.",
+  "license": "MIT",
+  "homepage": "https://github.com/Promsjjdod/Proyecto_IA",
+  "entry": "index.js",
+  "dependencies": [],
+  "permissions": [
+    "editor:read",
+    "editor:write",
+    "console:write",
+    "settings:read",
+    "settings:write",
+    "statusbar",
+    "notifications"
+  ],
+  "activationEvents": [
+    "onStartup"
+  ],
+  "contributes": {
+    "commands": [
+      "insertHeader",
+      "sessionReport",
+      "toggleWordWrap"
+    ]
+  }
+}

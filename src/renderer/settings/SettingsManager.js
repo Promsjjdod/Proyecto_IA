@@ -43,6 +43,27 @@ export class SettingsManager {
     return this.#categories.length > 0 ? this.#categories : this.#buildLocalCategories();
   }
 
+  /**
+   * Offline fallback: the same categories and settings, built from the shared schema.
+   * Used when the server cannot be reached, so the Settings view keeps working.
+   */
+  #buildLocalCategories() {
+    const order = Object.values(SettingsCategory);
+    const byCategory = new Map(order.map((id) => [id, []]));
+    for (const definition of SETTINGS_SCHEMA) {
+      if (!byCategory.has(definition.category)) byCategory.set(definition.category, []);
+      byCategory.get(definition.category).push(definition);
+    }
+    return [...byCategory.entries()]
+      .filter(([, settings]) => settings.length > 0)
+      .map(([id, settings]) => ({
+        ...(CATEGORY_INFO[id] ?? { id, label: id, description: '', icon: 'settings' }),
+        id,
+        settings,
+        local: true,
+      }));
+  }
+
   get pendingRestart() {
     return [...this.#pendingRestart];
   }

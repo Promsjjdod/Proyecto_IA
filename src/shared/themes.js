@@ -388,6 +388,9 @@ export const BUILTIN_THEMES = Object.freeze([
   },
 ]);
 
+/** Token values used to fill gaps when a theme omits a token (the default dark theme). */
+export const THEME_FALLBACK = Object.freeze({ ...dark });
+
 export const DEFAULT_THEME_ID = 'lumen-dark';
 
 /** The base theme used to fill gaps (and the colours the boot screen uses). */

@@ -10,8 +10,8 @@
  * fallback and the user is told exactly which ones were missing.
  */
 
-import { BUILTIN_THEMES, DEFAULT_THEME_ID, THEME_FALLBACK, THEME_TOKENS, THEME_TOKEN_GROUPS, validateTheme } from '../../shared/themes.js';
-import { ACCENT_DERIVED_TOKENS, deriveAccentTokens } from '../utils/color.js';
+import { ACCENT_DERIVED_TOKENS, BUILTIN_THEMES, DEFAULT_THEME_ID, THEME_FALLBACK, THEME_TOKENS, THEME_TOKEN_GROUPS, validateTheme } from '../../shared/themes.js';
+import { deriveAccentTokens } from '../utils/color.js';
 import { LocalKeys } from '../../shared/constants.js';
 
 export class ThemeManager {

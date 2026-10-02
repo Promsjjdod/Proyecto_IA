@@ -43,6 +43,16 @@ export class TabsController {
    * Lifecycle
    * ------------------------------------------------------------------ */
 
+  /**
+   * Provides the tab-strip container. Used by the App, which owns the chrome and therefore knows
+   * where the strip lives; `init()` (called by the kernel) then builds the tab nodes.
+   */
+  setContainer(container) {
+    if (!container) return { ok: false, reason: 'se necesita un contenedor' };
+    this.#container = container;
+    return { ok: true };
+  }
+
   init({ container = null } = {}) {
     if (container) this.#container = container;
     if (!this.#container) throw new Error('TabsController necesita un contenedor');

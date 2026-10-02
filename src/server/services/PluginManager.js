@@ -64,7 +64,11 @@ export class PluginManager {
     this.#errors = [];
 
     const roots = [];
-    if (this.builtinDir) roots.push({ dir: this.builtinDir, source: 'builtin' });
+    if (this.builtinDir) {
+      const builtinStat = await fsp.stat(this.builtinDir).catch(() => null);
+      if (builtinStat?.isDirectory()) roots.push({ dir: this.builtinDir, source: 'builtin' });
+      else this.logger.warn(`No hay un directorio de plugins incluidos en ${this.builtinDir}`, { source: 'PluginManager' });
+    }
     roots.push({ dir: this.storage.dirs.plugins, source: 'user' });
 
     for (const root of roots) {

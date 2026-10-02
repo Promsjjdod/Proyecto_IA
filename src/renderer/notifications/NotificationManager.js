@@ -287,7 +287,8 @@ export class NotificationManager {
                 if (action.keepOpen !== true) this.dismiss(notification.id);
               },
             },
-          })) : null,
+          })))
+          : null,
       ]),
       el('button.toast__close', {
         attrs: { type: 'button', 'aria-label': `Cerrar aviso de ${SEVERITY_LABEL[notification.severity]}` },
