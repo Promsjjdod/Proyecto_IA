@@ -23,13 +23,13 @@ import {
   defaultKeymap, history, historyKeymap, indentWithTab, undo, redo, toggleComment, deleteLine,
   copyLineDown, moveLineUp, moveLineDown, selectAll, indentMore, indentLess,
 } from '@codemirror/commands';
-import { bracketMatching, foldGutter, foldKeymap, foldAll, unfoldAll, syntaxHighlighting, indentUnit } from '@codemirror/language';
+import { bracketMatching, foldGutter, foldKeymap, foldAll, unfoldAll, indentUnit } from '@codemirror/language';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, completionStatus, startCompletion } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches, selectSelectionMatches, selectNextOccurrence as searchSelectNextOccurrence } from '@codemirror/search';
 import { linter, lintGutter, lintKeymap, forceLinting } from '@codemirror/lint';
-import { Dialect, DEFAULT_SCRIPT_TEMPLATE } from '../shared/constants.js';
+import { CapabilityId, Dialect, DEFAULT_SCRIPT_TEMPLATE } from '../shared/constants.js';
 import { resolveFontStack } from '../shared/settings-schema.js';
-import { luaHighlightStyle, luaLanguage } from './lua-language.js';
+import { SyntaxHighlighter } from './SyntaxHighlighter.js';
 import { buildAppearanceExtensions, buildEditorTheme } from './editor-theme.js';
 import { AnalysisClient, offsetToPosition } from './AnalysisClient.js';
 import { SearchManager } from './SearchManager.js';
@@ -37,9 +37,12 @@ import { Formatter } from './Formatter.js';
 import { CompletionManager } from './CompletionManager.js';
 import { Minimap } from './Minimap.js';
 
+// Últimos límites conocidos: el esquema de ajustes manda; esto sólo cubre un esquema ausente.
 const ZOOM_MIN = 8;
 const ZOOM_MAX = 40;
-const DEFAULT_FONT_SIZE = 13;
+const DEFAULT_FONT_SIZE = 14;
+
+const EMPTY_DIAGNOSTICS = Object.freeze([]);
 
 export class EditorManager {
   #view = null;
@@ -49,6 +52,7 @@ export class EditorManager {
   #completion = null;
   #search = null;
   #formatter = null;
+  #highlighter = null;
   #minimap = null;
   #listeners = new Set();
   #cursorListeners = new Set();
@@ -62,7 +66,7 @@ export class EditorManager {
   #lintTimer = null;
   #disposed = false;
 
-  constructor({ host, settings, themeManager, analysis, capabilities, logger, eventBus, errorBus, notifications, completion, search, formatter }) {
+  constructor({ host, settings, themeManager, analysis, capabilities, logger, eventBus, errorBus, notifications, completion, search, formatter, highlighter }) {
     this.host = host;
     this.settings = settings;
     this.themeManager = themeManager;
@@ -77,9 +81,11 @@ export class EditorManager {
     this.#completion = completion ?? new CompletionManager({ analysis, settings, logger });
     this.#search = search ?? new SearchManager({ logger, errorBus, apiClient: analysis?.apiClient });
     this.#formatter = formatter ?? new Formatter({ settings, logger });
+    this.#highlighter = highlighter ?? new SyntaxHighlighter({ settings, logger });
     this.completion = this.#completion;
     this.search = this.#search;
     this.formatter = this.#formatter;
+    this.highlighter = this.#highlighter;
     this.stats = { opened: 0, saved: 0, formats: 0, diagnosticRuns: 0, diagnosticErrors: 0, lastDiagnosticsAt: null, activeView: false };
   }
 
@@ -122,7 +128,7 @@ export class EditorManager {
     // settings change reconfigures every open document in place (cursor and history preserved).
     this.#baseExtensions = [
       ...core,
-      luaLanguage,
+      ...this.#highlighter.languageExtensions(),
       ...(autoIndent ? [] : [indentUnit.of('')]),
       this.#features.of(this.#featureExtensions()),
       this.#highlight.of(this.#highlightExtension()),
@@ -212,10 +218,9 @@ export class EditorManager {
     return extensions;
   }
 
-  /** Real syntax highlighting, toggleable from the settings. */
+  /** Real syntax highlighting, toggleable from the settings (el `SyntaxHighlighter` manda). */
   #highlightExtension() {
-    const enabled = this.settings ? this.settings.get('editor.syntaxHighlighting') !== false : true;
-    return enabled ? syntaxHighlighting(luaHighlightStyle) : [];
+    return this.#highlighter.highlightExtensions();
   }
 
   /**
@@ -308,7 +313,7 @@ export class EditorManager {
   }
 
   #wireMinimap() {
-    const capabilityOk = this.capabilities?.isAvailable?.('ui.canvas') !== false;
+    const capabilityOk = this.capabilities?.isAvailable?.(CapabilityId.UI_CANVAS) !== false;
     const wants = (this.settings?.get('editor.minimap') ?? true)
       && capabilityOk
       && this.settings?.get('performance.lowPerformanceMode') !== true;
@@ -752,7 +757,15 @@ export class EditorManager {
    * @returns {{ diagnostics: Array, unavailable: boolean, reason: string|null }}
    */
   diagnosticsState(id = this.#activeId) {
-    return this.#diagnostics.get(id) ?? { diagnostics: [], unavailable: !this.analysis.supported, reason: this.analysis.reason };
+    /*
+     * El estado por defecto se memoriza por documento: dos llamadas seguidas devuelven la misma
+     * lista y las vistas pueden comparar por referencia sin que aparezca un array nuevo cada vez.
+     */
+    const existing = this.#diagnostics.get(id);
+    if (existing) return existing;
+    const fallback = { diagnostics: EMPTY_DIAGNOSTICS, unavailable: !this.analysis.supported, reason: this.analysis.reason };
+    if (id) this.#diagnostics.set(id, fallback);
+    return fallback;
   }
 
   /** Diagnósticos del documento como lista plana; es lo que consumen las vistas. */
@@ -896,7 +909,19 @@ export class EditorManager {
 
   zoomIn() { return this.#zoom(1); }
   zoomOut() { return this.#zoom(-1); }
-  zoomReset() { return this.#setZoom(DEFAULT_FONT_SIZE); }
+  zoomReset() { return this.#setZoom(this.#zoomBounds().defaultValue); }
+
+  /**
+   * Límites reales del tamaño de fuente. El esquema de ajustes es la única fuente de verdad: si el
+   * editor recortara a un valor que el ajuste rechaza, el cambio de zoom fallaría en silencio.
+   */
+  #zoomBounds() {
+    const entry = this.settings?.schema?.find?.((item) => item.key === 'editor.fontSize') ?? null;
+    const min = Number.isFinite(entry?.min) ? entry.min : ZOOM_MIN;
+    const max = Number.isFinite(entry?.max) ? Math.max(min, entry.max) : ZOOM_MAX;
+    const defaultValue = Number.isFinite(entry?.default) ? Math.min(max, Math.max(min, entry.default)) : Math.min(max, Math.max(min, DEFAULT_FONT_SIZE));
+    return { min, max, defaultValue };
+  }
 
   /** Sets an exact font size (used by Ctrl+wheel, the layout restore and the settings slider). */
   setZoom(value) { return this.#setZoom(value); }
@@ -907,7 +932,8 @@ export class EditorManager {
   }
 
   async #setZoom(value) {
-    const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(value)));
+    const bounds = this.#zoomBounds();
+    const clamped = Math.max(bounds.min, Math.min(bounds.max, Math.round(value)));
     const result = await this.settings.set({ 'editor.fontSize': clamped }, { silent: true });
     if (result.ok !== false) {
       this.reconfigure();
@@ -989,7 +1015,8 @@ export class EditorManager {
       },
       formatter: this.formatter.describe(),
       completion: this.completion.describe(),
-      minimap: this.#minimap?.stats ?? { enabled: false, attached: false, reason: this.#minimapReason(this.capabilities?.isAvailable?.('ui.canvas') !== false) },
+      syntax: this.#highlighter.describe(this.themeManager?.active ?? null),
+      minimap: this.#minimap?.stats ?? { enabled: false, attached: false, reason: this.#minimapReason(this.capabilities?.isAvailable?.(CapabilityId.UI_CANVAS) !== false) },
       zoom: this.zoom,
     };
   }

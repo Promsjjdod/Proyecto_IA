@@ -41,6 +41,9 @@ export class DialogManager {
 
   constructor({ host, logger } = {}) {
     this.host = host ?? document.getElementById('lumen-overlays') ?? document.body;
+    // El contenedor se guarda también en el campo privado que usa `#createDialog`; si sólo se
+    // asignaba la propiedad pública, cada diálogo intentaba añadirse a `null` y fallaba.
+    this.#host = this.host;
     this.logger = logger;
   }
 

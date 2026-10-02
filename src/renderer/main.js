@@ -138,7 +138,13 @@ async function main() {
     notifications,
     eventBus,
     logger,
-    onCreateRequest: () => void app.newScript(),
+    /*
+     * `TabsController` pide aquí el guardado real cuando una pestaña todavía no tiene archivo:
+     * antes se creaba un script nuevo y vacío, que perdía el contenido del editor. `saveActive`
+     * conserva el texto del documento, lo envía con su nombre y marca la pestaña como guardada.
+     * Desde el menú contextual llega `{ saveAs: true }` para guardar una copia.
+     */
+    onCreateRequest: (tab, options = {}) => app.saveActive({ as: options?.saveAs === true }),
   });
   const consoleManager = new ConsoleManager({
     maxEntries: settings.get('performance.consoleMaxEntries') ?? Limits.maxConsoleEntries,

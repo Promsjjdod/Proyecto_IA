@@ -1,12 +1,10 @@
 # dependencies
 node_modules/
 
-# generated renderer build (rebuilt by `npm run build` / `npm start`)
-public/build/
-
-# vendored runtime artifacts copied from node_modules at build time
-public/vendor/
-
+# The compiled interface (`public/build`) and the vendored runtime artifacts
+# (`public/vendor`) ARE versioned on purpose: the distributed zip must run even when
+# `npm install` cannot execute its scripts, and the server only rebuilds them as an
+# improvement (see AppContext: the build step is not critical when verify() passes).
 # user data: scripts, settings, themes, history, logs (created at runtime)
 data/
 

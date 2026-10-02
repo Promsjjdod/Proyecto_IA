@@ -203,7 +203,13 @@ export class ScriptRepository {
   async create({ name, content = null, dialect = Dialect.LUAU, category = ScriptCategory.GENERAL, tags = [], description = '' } = {}) {
     const cleanName = expectString(name ?? 'nuevo-script', 'name', { min: 1, max: 120, allowEmpty: false });
     const cleanDialect = expectDialect(dialect);
-    const id = this.#uniqueId(slugify(cleanName));
+    /*
+     * El nombre visible puede incluir la extensión (el usuario la escribe, o la conserva al usar
+     * «guardar como»). El archivo recibe exactamente una extensión: la del dialecto. Sin esto un
+     * script llamado `juego.luau` acababa en `juego.luau.luau`.
+     */
+    const baseSlug = slugify(cleanName).replace(/\.(lua|luau|lua54)$/i, '');
+    const id = this.#uniqueId(baseSlug === '' ? 'script' : baseSlug);
     const ext = cleanDialect === Dialect.LUA54 ? '.lua' : '.luau';
     const file = `${id}${ext}`;
     const body = content === null ? defaultTemplateFor(cleanDialect, cleanName) : expectString(content, 'content', { max: Limits.maxSourceBytes });

@@ -186,7 +186,12 @@ export class TabsController {
         this.#stats.discarded += 1;
       }
     }
-    this.editor.closeDocument(id);
+    /*
+     * `force` también llega al editor: sin él, un documento sucio se negaba a cerrarse y la pestaña
+     * quedaba en la barra después de que el usuario ya hubiera decidido cerrarla o guardarla.
+     */
+    const closed = this.editor.closeDocument(id, { force: true });
+    if (closed?.ok === false) return { ok: false, reason: closed.reason ?? 'no se pudo cerrar', editor: closed };
     this.#stats.closed += 1;
     return { ok: true, id };
   }
@@ -542,7 +547,12 @@ export class TabsController {
       default:
         break;
     }
-    if (event.id && !this.#order.includes(event.id)) this.#order.push(event.id);
+    /*
+     * Alta defensiva de pestañas para eventos con id (un documento abierto por otra ruta). El caso
+     * `closed` queda excluido: si se volviera a añadir, la pestaña cerrada seguiría en la barra
+     * aunque su documento ya no exista y al pulsarla no habría nada que activar.
+     */
+    if (event.type !== 'closed' && event.id && !this.#order.includes(event.id)) this.#order.push(event.id);
     this.render();
     this.#notify({ reason: event.type, id: event.id ?? null, event });
     this.eventBus?.emit('tabs:changed', { reason: event.type, id: event.id ?? null });

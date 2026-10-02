@@ -154,7 +154,7 @@ export class ShortcutManager {
   #overrides = {};
   #preset = 'default';
   #listeners = [];
-  #stats = { handled: 0, unmatched: 0, blocked: { input: 0, disabled: 0 } };
+  #stats = { handled: 0, unmatched: 0, blocked: { input: 0, disabled: 0, busy: 0 } };
   #installed = false;
   #enabled = true;
   #contextStack = ['global'];
@@ -348,6 +348,14 @@ export class ShortcutManager {
         this.#stats.blocked.disabled += 1;
         event.preventDefault();
         this.notifications?.info(command.disabledReason?.() ?? `"${command.title}" no está disponible ahora mismo`, { durationMs: 2200 });
+        return false;
+      }
+
+      if (this.commands.isRunning?.(commandId)) {
+        // El comando sigue trabajando: se consume la tecla pero no se dispara una segunda ejecución.
+        this.#stats.blocked.busy += 1;
+        event.preventDefault();
+        event.stopPropagation();
         return false;
       }
 

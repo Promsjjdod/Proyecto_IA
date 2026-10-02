@@ -20,6 +20,7 @@ export class StatusBarController {
   #unsubscribers = [];
   #pluginHost = null;
   #pluginItems = new Map();
+  #initialized = false;
 
   constructor({ host, runtimeController, tabsController, notifications, eventStream, logger, editorManager, settings, capabilities, windowController }) {
     this.host = host;
@@ -35,11 +36,15 @@ export class StatusBarController {
   }
 
   init() {
+    // Idempotente: si la interfaz vuelve a pedir el arranque no se duplican temporizadores ni
+    // suscripciones (un `init()` repetido dejaba un reloj de 15 s huérfano).
+    if (this.#initialized) return { ok: true, already: true, segments: Object.keys(this.#segments).length };
     this.#host = this.host ?? document.getElementById('status-bar');
     if (!this.#host) throw new Error('No se encontró el contenedor de la barra de estado (#status-bar)');
     this.#render();
     this.#subscribe();
     this.#clockTimer = setInterval(() => this.#updateClock(), 15_000);
+    this.#initialized = true;
     this.refreshAll();
     return { ok: true, segments: Object.keys(this.#segments).length };
   }
@@ -369,7 +374,9 @@ export class StatusBarController {
   }
 
   dispose() {
+    this.#initialized = false;
     if (this.#clockTimer) clearInterval(this.#clockTimer);
+    this.#clockTimer = null;
     for (const unsubscribe of this.#unsubscribers) {
       try {
         unsubscribe();

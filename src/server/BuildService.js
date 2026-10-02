@@ -327,18 +327,29 @@ export class BuildService {
     return { js, css, workers, vendor: { bytes: vendorBytes, formatted: formatBytes(vendorBytes) } };
   }
 
-  /** Verifies that the artifacts on disk are present and non-empty. */
-  async verify() {
-    const checks = [
+  /**
+   * Artefactos que deben existir en disco. La lista se calcula siempre desde la configuración
+   * (`VENDOR_PACKAGES`/`VENDOR_ASSETS`), no desde el manifiesto en memoria: así la verificación es
+   * válida también al arrancar sin compilar, que es como se distribuye la aplicación.
+   */
+  #expectedArtifacts() {
+    return [
       { name: 'index.html', path: path.join(this.publicDir, 'index.html') },
       { name: 'build/app.js', path: path.join(this.buildDir, 'app.js') },
       { name: 'build/app.css', path: path.join(this.buildDir, 'app.css') },
       ...EXTRA_ENTRY_POINTS.map((entryPoint) => ({ name: `build/${entryPoint.output}`, path: path.join(this.buildDir, entryPoint.output) })),
-      ...this.vendorManifest.map((entry) => ({
-        name: entry.shim ?? entry.target,
-        path: path.join(this.publicDir, entry.shim ?? entry.target),
-      })),
+      ...VENDOR_PACKAGES.map((entry) => ({ name: entry.shim, path: path.join(this.vendorDir, entry.shim) })),
+      ...VENDOR_PACKAGES.flatMap((entry) => (entry.extraEntries ?? []).map((file) => ({
+        name: `${entry.shim}:${file}`,
+        path: path.join(this.vendorDir, entry.packagePath.replace('@', '').replace('/', '-'), file),
+      }))),
+      ...VENDOR_ASSETS.map((asset) => ({ name: asset.target, path: path.join(this.publicDir, asset.target) })),
     ];
+  }
+
+  /** Verifies that the artifacts on disk are present and non-empty. */
+  async verify() {
+    const checks = this.#expectedArtifacts();
     const results = [];
     for (const check of checks) {
       const stat = await fsp.stat(check.path).catch(() => null);

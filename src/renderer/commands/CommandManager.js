@@ -170,29 +170,60 @@ export class CommandManager {
 
     this.#running.set(id, Date.now());
     const startedAt = performance.now();
+    let outcome;
     try {
-      const result = await command.run(context);
-      command.usageCount += 1;
-      command.lastUsedAt = Date.now();
-      this.#executions += 1;
-      this.#pushRecent(id);
-      this.#emit.schedule();
-      this.eventBus?.emit('command:executed', {
-        id,
-        durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
-        ok: true,
-        source: context.source ?? 'unknown',
-      });
+      outcome = command.run(context);
+    } catch (err) {
+      return this.#finishedWithError(id, err, context);
+    }
+    /*
+     * Un comando síncrono libera el guardia de reentrada en este mismo turno. De lo contrario, una
+     * segunda pulsación inmediata del mismo atajo (Ctrl+B dos veces seguidas, por ejemplo) se
+     * descartaría con `busy` aunque no hubiera nada ejecutándose. El guardia sólo protege a los
+     * comandos que devuelven una promesa real y siguen trabajando cuando el evento termina.
+     */
+    if (!outcome || typeof outcome.then !== 'function') {
+      this.#running.delete(id);
+      this.#completed(id, outcome, context, startedAt);
+      return { ok: true, result: outcome };
+    }
+    try {
+      const result = await outcome;
+      this.#completed(id, result, context, startedAt);
       return { ok: true, result };
     } catch (err) {
-      this.#failures += 1;
-      this.eventBus?.emit('command:failed', { id, message: err?.message ?? String(err), source: context.source ?? 'unknown' });
-      const incident = this.errorBus?.report(err, { source: `comando:${id}`, kind: 'UI', silent: false });
-      if (!incident) this.logger?.error(err, { source: `CommandManager:${id}` });
-      return { ok: false, error: err };
+      return this.#finishedWithError(id, err, context);
     } finally {
       this.#running.delete(id);
     }
+  }
+
+  /** Registra el éxito de un comando (contadores, recientes y evento). */
+  #completed(id, result, context, startedAt) {
+    const command = this.#commands.get(id);
+    if (command) {
+      command.usageCount += 1;
+      command.lastUsedAt = Date.now();
+    }
+    this.#executions += 1;
+    this.#pushRecent(id);
+    this.#emit.schedule();
+    this.eventBus?.emit('command:executed', {
+      id,
+      durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+      ok: true,
+      source: context.source ?? 'unknown',
+    });
+    return result;
+  }
+
+  /** Registra el fallo de un comando reportándolo por el bus de errores. Nunca lo oculta. */
+  #finishedWithError(id, err, context) {
+    this.#failures += 1;
+    this.eventBus?.emit('command:failed', { id, message: err?.message ?? String(err), source: context.source ?? 'unknown' });
+    const incident = this.errorBus?.report(err, { source: `comando:${id}`, kind: 'UI', silent: false });
+    if (!incident) this.logger?.error(err, { source: `CommandManager:${id}` });
+    return { ok: false, error: err };
   }
 
   isRunning(id) {

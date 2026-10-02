@@ -16,7 +16,7 @@
  * Tab, auto-indent and the fold gutter behave like a code editor should.
  */
 
-import { StreamLanguage, indentService, foldService, syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { StreamLanguage, indentService, foldService } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
 export const LUA_KEYWORDS = new Set([
@@ -476,53 +476,3 @@ export const luaFoldService = foldService.of((state, lineStart, lineEnd) => {
   if (end === null) return null;
   return { from: startLine.to, to: end };
 });
-
-/* ------------------------------------------------------------------------ *
- * Highlight style
- * ------------------------------------------------------------------------ */
-
-/**
- * Maps tokens to the theme's syntax variables. No colour is written here: the HighlightStyle
- * references `--syn-*` custom properties, so switching the theme instantly restyles the code.
- */
-export const luaHighlightStyle = HighlightStyle.define([
-  { tag: t.keyword, color: 'var(--syn-keyword)' },
-  { tag: t.controlKeyword, color: 'var(--syn-keyword)' },
-  { tag: t.modifier, color: 'var(--syn-keyword)' },
-  { tag: t.string, color: 'var(--syn-string)' },
-  { tag: t.special(t.string), color: 'var(--syn-interpolation)' },
-  { tag: t.escape, color: 'var(--syn-string-escape)' },
-  { tag: t.number, color: 'var(--syn-number)' },
-  { tag: t.bool, color: 'var(--syn-constant)' },
-  { tag: t.null, color: 'var(--syn-constant)' },
-  { tag: t.constant(t.variableName), color: 'var(--syn-constant)' },
-  { tag: t.standard(t.variableName), color: 'var(--syn-global)' },
-  { tag: t.variableName, color: 'var(--syn-variable)' },
-  { tag: t.local(t.variableName), color: 'var(--syn-variable)' },
-  { tag: t.function(t.variableName), color: 'var(--syn-function)' },
-  { tag: t.function(t.propertyName), color: 'var(--syn-method)' },
-  { tag: t.propertyName, color: 'var(--syn-property)' },
-  { tag: t.typeName, color: 'var(--syn-type)' },
-  { tag: t.className, color: 'var(--syn-type)' },
-  { tag: t.operator, color: 'var(--syn-operator)' },
-  { tag: t.definitionOperator, color: 'var(--syn-operator)' },
-  { tag: t.punctuation, color: 'var(--syn-punctuation)' },
-  { tag: t.bracket, color: 'var(--syn-punctuation)' },
-  { tag: t.lineComment, color: 'var(--syn-comment)', fontStyle: 'italic' },
-  { tag: t.blockComment, color: 'var(--syn-comment)', fontStyle: 'italic' },
-  { tag: t.docComment, color: 'var(--syn-doc-comment)', fontStyle: 'italic' },
-  { tag: t.invalid, color: 'var(--syn-invalid)', textDecoration: 'underline wavy' },
-  { tag: t.labelName, color: 'var(--syn-parameter)' },
-]);
-
-/** Language support bundle: tokenizer + highlight style + indentation + folding. */
-export function lua() {
-  return [
-    luaLanguage,
-    syntaxHighlighting(luaHighlightStyle),
-    luaIndentService,
-    luaFoldService,
-  ];
-}
-
-export const LUA_LANGUAGE_EXTENSION = lua();

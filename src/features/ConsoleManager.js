@@ -223,15 +223,30 @@ export class ConsoleManager {
   #onRuntimeFinished(payload) {
     if (!payload) return;
     if (payload.state === 'SUCCESS') return; // executionFinished already logged the summary
-    if (payload.error) {
-      this.append({
-        level: LogLevel.ERROR,
-        message: `Ejecución ${labelForState(payload.state)}${payload.error ? `: ${payload.error}` : ''}`,
-        source: 'runtime',
-        executionId: payload.executionId ?? null,
-        collapsible: false,
-      });
-    }
+    if (!payload.error && !payload.errorMessage) return;
+    /*
+     * El error se registra con todo lo que el motor sabe: código, mensaje real, archivo, línea y
+     * traza. La entrada queda expandible para que el detalle no se pierda al copiar el registro.
+     */
+    const code = payload.error ?? 'E_RUNTIME';
+    const detail = payload.errorMessage ? `${code}: ${payload.errorMessage}` : code;
+    this.append({
+      level: LogLevel.ERROR,
+      message: `Ejecución ${labelForState(payload.state)} · ${detail}`,
+      source: 'runtime',
+      line: Number.isFinite(payload.line) ? payload.line : null,
+      executionId: payload.executionId ?? null,
+      data: {
+        code,
+        kind: payload.errorKind ?? null,
+        file: payload.file ?? null,
+        line: Number.isFinite(payload.line) ? payload.line : null,
+        traceback: payload.traceback ?? null,
+        stack: payload.stack ?? null,
+        engineId: payload.engineId ?? null,
+      },
+      collapsible: false,
+    });
   }
 
   #bumpCounts(entry, delta) {

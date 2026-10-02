@@ -64,7 +64,8 @@ export class SettingsView {
     this.#visible = true;
     this.#unsubscribers.push(
       this.#app.settings.subscribe(() => this.#refresh.schedule()),
-      this.#app.theme.onChange?.(() => this.#refresh.schedule()) ?? (() => {}),
+      // `ThemeManager` notifica por `subscribe`; el nombre del token de fondo es `bg-app`.
+      this.#app.theme.subscribe(() => this.#refresh.schedule()),
     );
     const startup = this.#app.settings.get('general.startupView');
     if (startup && startup !== 'settings' && this.#activeCategory === 'general') {
@@ -299,7 +300,7 @@ export class SettingsView {
         },
       },
     }, [
-      el('div.theme-card__preview', { style: { background: entry.tokens?.['background-app'] ?? entry.tokens?.['bg-app'] ?? 'transparent' } }, [
+      el('div.theme-card__preview', { style: { background: entry.tokens?.['bg-app'] ?? 'transparent' } }, [
         el('div.theme-card__swatch', { style: { background: entry.tokens?.['accent'] ?? 'transparent' } }),
       ]),
       el('div.theme-card__name', { text: entry.name }),

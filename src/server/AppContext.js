@@ -312,6 +312,14 @@ export class AppContext {
     this.sse.subscribeToBus();
 
     if (buildIfNeeded) {
+      /*
+       * Si la interfaz ya está compilada y verificada (el caso de la distribución: `public/build` y
+       * `public/vendor` viajan dentro), compilar es una mejora, no un requisito. Un `npm install`
+       * con los scripts de instalación bloqueados no debe impedir arrancar: el paso deja de ser
+       * crítico y el fallo queda registrado con su causa real. Sin artefactos verificados sigue
+       * siendo crítico, porque entonces no habría interfaz que servir.
+       */
+      const prebuilt = await this.build.verify().catch(() => ({ ok: false, results: [] }));
       await step('build', async () => {
         if (!this.build.needsRebuild()) {
           const verification = await this.build.verify();
@@ -320,7 +328,10 @@ export class AppContext {
         const result = await this.build.build({ minify: !watch, sourcemap: true });
         if (!result.ok) throw result.error;
         return result;
-      }, { critical: true });
+      }, { critical: !prebuilt.ok });
+      if (!prebuilt.ok) {
+        this.logger.warn('No hay interfaz compilada verificada: el paso de compilación es obligatorio', { source: 'AppContext' });
+      }
     }
     if (watch) {
       this.buildWatcher = await step('build-watch', () => this.build.watch());

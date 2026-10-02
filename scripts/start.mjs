@@ -52,10 +52,26 @@ if (major < 20 || (major === 20 && minor < 10)) {
 // 2. Dependencias realmente instaladas (no se asume nada).
 const required = ['codemirror', '@codemirror/view', '@luau-rs/luau', 'wasmoon', 'esbuild'];
 const missing = required.filter((name) => !fs.existsSync(path.join(ROOT, 'node_modules', name)));
-if (missing.length > 0) {
+
+/*
+ * La distribución viaja con la interfaz ya compilada (`public/build` + `public/vendor`), así que
+ * la falta de dependencias no impide arrancar: impide *recompilar* y deja sin motor local al
+ * servidor. Se avisa con exactitud en lugar de abortar. Si no hubiera interfaz compilada, entonces
+ * sí es un error fatal, porque no habría nada que servir.
+ */
+const prebuilt = ['build/app.js', 'build/app.css'].every((file) => fs.existsSync(path.join(ROOT, 'public', file)))
+  && fs.existsSync(path.join(ROOT, 'public', 'index.html'));
+if (missing.length > 0 && !prebuilt) {
   fail(
     `Faltan dependencias: ${missing.join(', ')}`,
     `  Instálalas con:\n\n    cd "${ROOT}"\n    npm install\n`,
+  );
+}
+if (missing.length > 0) {
+  process.stdout.write(
+    `\n  Aviso: no se encontraron estas dependencias: ${missing.join(', ')}\n`
+    + '  La interfaz compilada que viene con el proyecto se sirve igual, pero no se podrá\n'
+    + '  recompilar ni usar el motor local de Luau. Ejecuta `npm install` para completarlo.\n',
   );
 }
 

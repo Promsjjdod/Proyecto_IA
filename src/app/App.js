@@ -42,6 +42,7 @@ export class App {
   #sidebarMode = 'expanded';
   #unsubscribers = [];
   #clockTimer = null;
+  #lastCompactSidebar = null;
   #capabilitySummary = null;
 
   constructor(services) {
@@ -370,7 +371,15 @@ export class App {
     root.dataset.animations = this.settings.get('appearance.animations') === false ? 'off' : 'on';
     root.dataset.density = this.settings.get('appearance.consoleDensity') ?? 'comfortable';
     const compact = this.settings.get('appearance.compactSidebar') === true;
-    if (compact !== (this.#sidebarMode === 'compact')) this.setSidebar(compact ? 'compact' : 'expanded');
+    /*
+     * Sólo se actúa cuando el ajuste cambia respecto del último valor aplicado. Guardar desde el
+     * interfaz es asíncrono: sin esta comprobación, la confirmación tardía del guardado anterior
+     * volvía a imponer el estado antiguo y deshacía el último cambio del usuario.
+     */
+    if (this.#lastCompactSidebar !== compact) {
+      this.#lastCompactSidebar = compact;
+      if (compact !== (this.#sidebarMode === 'compact')) this.setSidebar(compact ? 'compact' : 'expanded');
+    }
     // Oculta las etiquetas de texto de los botones de la barra superior (CSS lo resuelve).
     root.dataset.toolbarLabels = this.settings.get('appearance.showToolbarLabels') === false ? 'off' : 'on';
   }
@@ -605,6 +614,13 @@ export class App {
           this.notifications.error(created.error?.message ?? 'No se pudo guardar el script');
           return created;
         }
+        /*
+         * La pestaña temporal (sin archivo) ya no hace falta: su texto acaba de guardarse en el
+         * script nuevo. Se cierra sin preguntar para no dejar un duplicado sucio en la barra; el
+         * contenido no se pierde porque está en el disco y en la pestaña del script creado.
+         */
+        // `close()` devuelve `{ok:false}` si la pestaña ya no existe; no hay nada que comprobar antes.
+        if (tab.id !== created.script.id) await this.tabs.close(tab.id, { force: true }).catch(() => {});
         this.tabs.activate(created.script.id);
         this.editor.markSaved?.(created.script.id, { content: this.editor.getValue(created.script.id) ?? '' });
         this.notifications.success(`Guardado como ${created.script.name}`);
@@ -1095,8 +1111,11 @@ export class App {
    * \* ------------------------------------------------------------------ */
 
   async dispose() {
-    clearTimeout(this.#clockTimer);
+    clearInterval(this.#clockTimer);
     this.#clockTimer = null;
+    // La barra de estado no es un servicio del kernel, pero sí tiene un reloj propio: se libera aquí
+    // junto con sus suscripciones para no dejar temporizadores vivos tras cerrar la interfaz.
+    this.statusBar?.dispose?.();
     for (const unsubscribe of this.#unsubscribers.splice(0)) unsubscribe?.();
     for (const view of this.#views.values()) {
       try {

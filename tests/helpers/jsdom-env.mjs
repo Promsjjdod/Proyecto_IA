@@ -105,6 +105,18 @@ export async function startServer({ timeoutMs = 30_000 } = {}) {
                 });
               });
             }
+            // Cierra las tuberías del proceso hijo: si quedan abiertas, el proceso de prueba nunca
+            // termina por sí solo (el runner de `node --test` espera a que el bucle se vacíe).
+            for (const stream of [child.stdout, child.stderr, child.stdin]) {
+              try {
+                stream?.removeAllListeners?.();
+                stream?.destroy?.();
+              } catch {
+                /* nada que hacer */
+              }
+            }
+            child.removeAllListeners();
+            child.unref();
             await fs.rm(dataDir, { recursive: true, force: true }).catch(() => {});
           },
         };
@@ -294,11 +306,21 @@ export async function loadApp({ serverUrl, bundlePath, timeoutMs = 40_000 } = {}
         /* el apagado no debe enmascarar el resultado del test */
       }
       globalThis.fetch = realFetch;
+      // Desmonta los temporizadores de jsdom (`pretendToBeVisual` mantiene un bucle de
+      // requestAnimationFrame) para que el proceso de prueba pueda terminar.
+      for (let i = 0; i < 1000 && dom.window.setTimeout; i += 1) {
+        try {
+          dom.window.clearTimeout(i);
+          dom.window.clearInterval(i);
+        } catch {
+          break;
+        }
+      }
+      dom.window.close();
       for (const [key, descriptor] of saved) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor);
         else delete globalThis[key];
       }
-      dom.window.close();
     },
   };
 }

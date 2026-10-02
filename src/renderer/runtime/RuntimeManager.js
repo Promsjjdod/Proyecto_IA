@@ -586,12 +586,23 @@ export class RuntimeManager {
       engine: record.engineLabel,
       error: record.error ? { code: record.error.code, message: record.error.message } : null,
     });
+    /*
+     * El evento lleva el error completo, no sólo el código: la consola y el panel de errores
+     * muestran el mensaje real, el archivo, la línea y la traza sin tener que volver a consultar
+     * el historial. Los errores nunca se resumen a un identificador opaco.
+     */
     this.eventBus?.emit('runtime:finished', {
       executionId: record.executionId,
       state: record.state,
       ok: record.ok,
       durationMs,
       error: record.error?.code ?? null,
+      errorMessage: record.error?.message ?? null,
+      errorKind: record.error?.kind ?? null,
+      file: record.error?.detail?.file ?? null,
+      line: Number.isFinite(record.error?.detail?.line) ? record.error.detail.line : null,
+      traceback: Array.isArray(record.error?.detail?.traceback) ? record.error.detail.traceback : null,
+      stack: record.error?.stack ?? null,
       engineId: record.engineId,
     });
     if (this.settings?.get('execution.recordHistory') === false) {
