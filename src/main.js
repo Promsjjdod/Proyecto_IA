@@ -30,8 +30,18 @@ window.addEventListener('resize', fit); fit();
 
 /* ---------- Boot ---------- */
 const loaderFill = document.getElementById('loaderFill');
-await preload(p => { loaderFill.style.width = `${Math.round(p * 100)}%`; });
-document.getElementById('loader').classList.add('is-hidden');
+const loaderEl = document.getElementById('loader');
+const showBootError = (msg) => { const h = loaderEl.querySelector('.loader__hint'); h.textContent = 'Error al iniciar: ' + msg; h.style.color = '#f43f8e'; console.error(msg); };
+window.addEventListener('error', (e) => { if (!loaderEl.classList.contains('is-hidden')) showBootError(e.message); });
+try {
+  // never block the game on slow/missing images: hard timeout of 8 s
+  await Promise.race([
+    preload(p => { loaderFill.style.width = `${Math.round(p * 100)}%`; }),
+    new Promise(r => setTimeout(r, 8000)),
+  ]);
+} catch (e) { showBootError(e.message); }
+loaderFill.style.width = '100%';
+loaderEl.classList.add('is-hidden');
 warmHD();
 
 const ui = new UI();
