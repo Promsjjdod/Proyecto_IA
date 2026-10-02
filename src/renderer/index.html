@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="lumen-dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="description" content="Lumen Studio — entorno profesional de edición y ejecución de scripts Lua/Luau" />
+  <title>Lumen Studio</title>
+  <link rel="stylesheet" href="__LUMEN_CSS__" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b8dff'/%3E%3Cpath d='M9 22V10h3.2v9.2H21V22H9z' fill='%23071019'/%3E%3C/svg%3E" />
+  <script type="importmap">
+/*__LUMEN_IMPORT_MAP__*/
+  </script>
+</head>
+<body>
+  <div id="lumen-boot" class="boot">
+    <div class="boot__inner">
+      <div class="boot__logo" aria-hidden="true">L</div>
+      <h1 class="boot__title">Lumen Studio</h1>
+      <p class="boot__status" id="lumen-boot-status">Iniciando…</p>
+      <div class="boot__progress"><div class="boot__bar" id="lumen-boot-bar"></div></div>
+      <ul class="boot__steps" id="lumen-boot-steps"></ul>
+    </div>
+  </div>
+
+  <div id="lumen-root" class="app" hidden aria-live="polite"></div>
+  <div id="lumen-overlays" class="overlays" aria-live="assertive"></div>
+
+  <noscript>
+    <div class="noscript">Lumen Studio necesita JavaScript habilitado para funcionar (el editor, el runtime y la consola se ejecutan en el navegador).</div>
+  </noscript>
+
+  <script type="module" src="__LUMEN_JS__"></script>
+</body>
+</html>

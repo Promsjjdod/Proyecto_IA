@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# generated renderer build (rebuilt by `npm run build` / `npm start`)
+public/build/
+
+# vendored runtime artifacts copied from node_modules at build time
+public/vendor/
+
+# user data: scripts, settings, themes, history, logs (created at runtime)
+data/
+
+# native interpreters built from source by scripts/setup.mjs
+tools/bin/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.tmp/
