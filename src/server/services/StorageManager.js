@@ -564,11 +564,13 @@ export class StorageManager {
   watch(target, handler, { allowAbsolute = false, recursive = false } = {}) {
     const abs = this.resolveSafe(target, { allowAbsolute });
     const exists = fs.existsSync(abs);
-    const isFile = exists && fs.statSync(abs).isFile();
-    const watchPath = isFile ? path.dirname(abs) : abs;
-    const baseName = isFile ? path.basename(abs) : null;
+    const isDirectory = exists && fs.statSync(abs).isDirectory();
+    // Only real directories are watched directly; files (and files that do not exist yet) are
+    // tracked through their parent directory, filtered by name.
+    const watchPath = isDirectory ? abs : path.dirname(abs);
+    const baseName = isDirectory ? null : path.basename(abs);
     try {
-      const watcher = fs.watch(watchPath, { recursive: isFile ? false : recursive, persistent: false }, (eventType, filename) => {
+      const watcher = fs.watch(watchPath, { recursive: isDirectory ? recursive : false, persistent: false }, (eventType, filename) => {
         const name = filename ? String(filename) : null;
         if (baseName !== null && name !== null && name !== baseName) return;
         handler({ eventType, filename: name, path: abs, timestamp: Date.now(), filter: baseName ? null : path.basename(abs) });

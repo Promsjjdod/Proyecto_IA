@@ -18,11 +18,14 @@ import { Dialect } from '../shared/constants.js';
 import { KEYWORD_COMPLETIONS, SNIPPETS, STDLIB_COMPLETIONS, snippetsFor } from './snippets.js';
 import { offsetToPosition } from './AnalysisClient.js';
 
-const ENGINE_DEBOUNCE_MS = 220;
+const ENGINE_DEBOUNCE_MS = 120;
+/** CodeMirror snippet placeholder with no default text (written this way so nothing is interpolated). */
+const EMPTY_FIELD = '$' + '{}';
 const MAX_DOCUMENT_WORDS = 900;
 
 export class CompletionManager {
   #cache = new Map();
+  #abort = new Map();
   #timer = null;
   #pending = null;
   #stats = { requested: 0, engineResults: 0, localResults: 0, failures: 0, servedFromCache: 0 };
@@ -31,6 +34,12 @@ export class CompletionManager {
     this.analysis = analysis;
     this.settings = settings;
     this.logger = logger;
+  }
+
+  /** Real debounce applied before asking the engine (mirrors `editor.autocompleteDelayMs`). */
+  get engineDelayMs() {
+    const configured = this.settings?.get('editor.autocompleteDelayMs');
+    return Number.isFinite(configured) ? Math.max(0, configured) : ENGINE_DEBOUNCE_MS;
   }
 
   describe() {
@@ -136,7 +145,7 @@ export class CompletionManager {
       this.#stats.servedFromCache += 1;
       return cached;
     }
-    const promise = Promise.resolve()
+    const promise = wait(this.engineDelayMs, this.#abortFor(key))
       .then(() => this.analysis.complete({ module, source, line: position.line, character: position.character }))
       .then((result) => {
         const entries = result?.entries ?? [];
@@ -152,6 +161,20 @@ export class CompletionManager {
     return promise;
   }
 
+  /** Per-request debounce handle: asking again for the same position restarts the wait. */
+  #abortFor(key) {
+    const controller = new AbortController();
+    this.#abort.get(key)?.abort?.();
+    this.#abort.delete(key);
+    this.#abort.set(key, controller);
+    if (this.#abort.size > 20) {
+      const oldest = this.#abort.keys().next().value;
+      this.#abort.get(oldest)?.abort?.();
+      this.#abort.delete(oldest);
+    }
+    return controller.signal;
+  }
+
   #cacheEngine(key, promise) {
     if (this.#cache.size > 40) {
       const oldest = this.#cache.keys().next().value;
@@ -160,12 +183,20 @@ export class CompletionManager {
     this.#cache.set(key, promise);
   }
 
+  /**
+   * Converts engine entries into CodeMirror completions.
+   * Functions and methods that need parentheses are inserted as a real snippet with the caret
+   * inside the call (`snippet(template)` returns CodeMirror's own apply function).
+   */
   #toOptions(entries, doc) {
     const options = [];
+    const limit = this.settings?.get('editor.maxCompletionItems') ?? 120;
     for (const entry of entries) {
-      const insert = entry.insertText ?? entry.label;
+      if (options.length >= limit) break;
+      if (!entry?.label) continue;
+      const insert = typeof entry.insertText === 'string' && entry.insertText !== '' ? entry.insertText : entry.label;
       const wantsParens = entry.parentheses === 'required' || entry.parentheses === 'optional';
-      const base = {
+      const option = {
         label: entry.label,
         type: mapCompletionKind(entry.kind),
         detail: entry.type ?? entry.kind ?? undefined,
@@ -173,11 +204,8 @@ export class CompletionManager {
         boost: entry.kind === 'Property' || entry.kind === 'Method' ? 90 : 50,
         deprecated: entry.deprecated === true ? 'obsoleto' : undefined,
       };
-      if (wantsParens && !insert.endsWith('(')) {
-        options.push(snippet(`${insert}(\${})`)(buildOption(base, insert)));
-      } else {
-        options.push(base);
-      }
+      if (wantsParens && !insert.endsWith('(')) option.apply = snippet(`${insert}(${EMPTY_FIELD})`);
+      options.push(option);
     }
     void doc;
     return options;
@@ -220,10 +248,6 @@ function mapCompletionKind(kind) {
   }
 }
 
-function buildOption(base, insert) {
-  return { ...base, type: base.type, label: base.label, detail: base.detail ?? insert };
-}
-
 /** Unique identifiers present in the document (bounded scan, ignores comments roughly). */
 export function documentWords(doc, prefix, limit = MAX_DOCUMENT_WORDS) {
   const seen = new Set();
@@ -242,3 +266,16 @@ export function documentWords(doc, prefix, limit = MAX_DOCUMENT_WORDS) {
 }
 
 export { SNIPPETS };
+
+/** Cancellable delay used to debounce engine completions (never blocks local results). */
+function wait(ms, signal) {
+  if (!(ms > 0)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => clearTimeout(timer);
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+  });
+}

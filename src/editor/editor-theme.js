@@ -153,7 +153,16 @@ export function buildEditorTheme({ dark = true } = {}) {
  * Per-user appearance: font size/family, line height, tab size and word wrap.
  * Lives in a Compartment so a settings change reconfigures the view without recreating it.
  */
-export function buildAppearanceExtensions({ fontSize = 13, fontFamily = '', lineHeight = 1.55, tabSize = 2, insertSpaces = true, wordWrap = false }) {
+export function buildAppearanceExtensions({
+  fontSize = 14,
+  fontFamily = '',
+  lineHeight = 1.55,
+  tabSize = 4,
+  insertSpaces = true,
+  wordWrap = false,
+  wrapColumn = 100,
+  cursorBlink = true,
+} = {}) {
   const theme = EditorView.theme({
     '&': {
       fontSize: `${fontSize}px`,
@@ -167,7 +176,12 @@ export function buildAppearanceExtensions({ fontSize = 13, fontFamily = '', line
     '.cm-content': {
       tabSize: String(tabSize),
       ...(fontFamily ? { fontFamily } : {}),
+      // Real wrap width: with line wrapping on, the content column never exceeds `wrapColumn`
+      // characters, which is what the setting promises.
+      ...(wordWrap && Number.isFinite(wrapColumn) ? { maxWidth: `${Math.round(wrapColumn)}ch` } : {}),
     },
+    // `editor.cursorBlink = false` stops the blink animation for real (the caret stays visible).
+    ...(cursorBlink ? {} : { '.cm-cursor, .cm-dropCursor': { animation: 'none' } }),
   });
   return [
     theme,

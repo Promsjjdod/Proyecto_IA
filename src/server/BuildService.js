@@ -287,7 +287,11 @@ export class BuildService {
     const jsHash = await shortHash(path.join(this.buildDir, 'app.js'));
     const cssHash = await shortHash(path.join(this.buildDir, 'app.css'));
     const importMap = {
-      imports: Object.fromEntries(this.vendorManifest.map((entry) => [entry.specifier, `./vendor/${entry.shim}`])),
+      imports: Object.fromEntries(
+        this.vendorManifest
+          .filter((entry) => typeof entry.specifier === 'string' && entry.specifier !== '' && typeof entry.shim === 'string')
+          .map((entry) => [entry.specifier, `./${entry.shim}`]),
+      ),
     };
     const html = template
       .replace('/*__LUMEN_IMPORT_MAP__*/', JSON.stringify(importMap, null, 2))
@@ -329,9 +333,9 @@ export class BuildService {
       { name: 'build/app.css', path: path.join(this.buildDir, 'app.css') },
       ...EXTRA_ENTRY_POINTS.map((entryPoint) => ({ name: `build/${entryPoint.output}`, path: path.join(this.buildDir, entryPoint.output) })),
       ...this.vendorManifest.map((entry) => ({
-        name: entry.shim ? `vendor/${entry.shim}` : `vendor/${entry.target}`,
-        path: entry.shim ? path.join(this.publicDir, 'vendor', entry.shim) : path.join(this.publicDir, entry.target),
-      })).filter((entry) => entry.path !== undefined),
+        name: entry.shim ?? entry.target,
+        path: path.join(this.publicDir, entry.shim ?? entry.target),
+      })),
     ];
     const results = [];
     for (const check of checks) {

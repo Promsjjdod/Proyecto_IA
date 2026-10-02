@@ -432,7 +432,10 @@ export class ScriptRepository {
   async exportPayload(id) {
     const record = this.require(id);
     const content = await this.storage.readText(path.join('scripts', record.file), { fallback: '' });
-    return { filename: `${record.name}${record.dialect === Dialect.LUA54 ? '.lua' : '.luau'}`, content };
+    // The exported file keeps a single extension, even when the script name already has one.
+    const extension = record.dialect === Dialect.LUA54 ? '.lua' : '.luau';
+    const base = record.name.replace(/\.(lua|luau|lua54)$/i, '');
+    return { filename: `${base || record.name}${extension}`, content };
   }
 
   /** Records the outcome of a real execution against a script. */

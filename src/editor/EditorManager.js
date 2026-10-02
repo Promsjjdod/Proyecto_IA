@@ -17,6 +17,7 @@ import { EditorState, Compartment, EditorSelection } from '@codemirror/state';
 import {
   EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection,
   dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, placeholder, tooltips, hoverTooltip,
+  scrollPastEnd, highlightWhitespace,
 } from '@codemirror/view';
 import {
   defaultKeymap, history, historyKeymap, indentWithTab, undo, redo, toggleComment, deleteLine,
@@ -27,6 +28,7 @@ import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, c
 import { searchKeymap, highlightSelectionMatches, selectSelectionMatches, selectNextOccurrence as searchSelectNextOccurrence } from '@codemirror/search';
 import { linter, lintGutter, lintKeymap, forceLinting } from '@codemirror/lint';
 import { Dialect, DEFAULT_SCRIPT_TEMPLATE } from '../shared/constants.js';
+import { resolveFontStack } from '../shared/settings-schema.js';
 import { luaHighlightStyle, luaLanguage } from './lua-language.js';
 import { buildAppearanceExtensions, buildEditorTheme } from './editor-theme.js';
 import { AnalysisClient, offsetToPosition } from './AnalysisClient.js';
@@ -53,6 +55,8 @@ export class EditorManager {
   #appearance = new Compartment();
   #theme = new Compartment();
   #lint = new Compartment();
+  #features = new Compartment();
+  #highlight = new Compartment();
   #diagnostics = new Map();
   #lintTimer = null;
   #disposed = false;
@@ -80,41 +84,16 @@ export class EditorManager {
   async init() {
     if (!this.host) throw new Error('EditorManager necesita un contenedor (#editor-host)');
 
-    this.#baseExtensions = [
-      lineNumbers(),
-      highlightActiveLineGutter(),
+    // Extensions that are always present (core editing behaviour).
+    const autoIndent = this.settings ? this.settings.get('editor.autoIndent') !== false : true;
+    const core = [
       highlightSpecialChars(),
       history(),
-      foldGutter(),
       drawSelection(),
       dropCursor(),
-      EditorState.allowMultipleSelections.of(true),
-      rectangularSelection(),
-      crosshairCursor(),
-      highlightActiveLine(),
-      highlightSelectionMatches({ highlightMatches: true, minSelectionLength: 2 }),
-      closeBrackets(),
-      bracketMatching(),
-      autocompletion({
-        override: [this.#completionSource()],
-        activateOnTyping: true,
-        maxRenderedOptions: 60,
-        closeOnBlur: true,
-        icons: true,
-        defaultKeymap: true,
-      }),
       tooltips({ position: 'absolute' }),
-      hoverTooltip((view, position) => this.#hoverTooltip(view, position), { hoverTime: 320 }),
+      hoverTooltip((view, position, side) => this.#hoverTooltip(view, position, side), { hoverTime: 320 }),
       placeholder('Escribe código Lua o Luau y pulsa Ctrl+Enter para ejecutarlo…'),
-      this.#theme.of(buildEditorTheme({ dark: this.themeManager?.active?.type !== 'light' })),
-      this.#appearance.of(buildAppearanceExtensions(this.#appearanceOptions())),
-      this.#lint.of(linter(this.#linterSource(), {
-        delay: Math.max(200, this.settings?.get('editor.analysisDebounceMs') ?? 500),
-        needsRefresh: (update) => update.docChanged || update.viewportChanged,
-      })),
-      lintGutter(),
-      syntaxHighlighting(luaHighlightStyle),
-      luaLanguage,
       keymap.of([
         ...this.#customKeymap(),
         ...closeBracketsKeymap,
@@ -131,6 +110,20 @@ export class EditorManager {
         focus: () => { this.stats.activeView = true; },
         blur: () => { this.stats.activeView = false; },
       }),
+    ];
+
+    // Optional features, syntax highlighting, linting and appearance live in compartments so a
+    // settings change reconfigures every open document in place (cursor and history preserved).
+    this.#baseExtensions = [
+      ...core,
+      luaLanguage,
+      ...(autoIndent ? [] : [EditorState.indentUnit.of('')]),
+      this.#features.of(this.#featureExtensions()),
+      this.#highlight.of(this.#highlightExtension()),
+      this.#theme.of(buildEditorTheme({ dark: this.themeManager?.active?.type !== 'light' })),
+      this.#appearance.of(buildAppearanceExtensions(this.#appearanceOptions())),
+      this.#lint.of(this.#lintExtension()),
+      lintGutter(),
     ];
 
     this.#view = new EditorView({
@@ -155,20 +148,90 @@ export class EditorManager {
   }
 
   #appearanceOptions() {
+    const wordWrap = this.settings?.get('editor.wordWrap') === true;
+    const wrapColumn = this.settings?.get('editor.wrapColumn') ?? 100;
     return {
       fontSize: this.settings?.get('editor.fontSize') ?? DEFAULT_FONT_SIZE,
-      fontFamily: this.#fontFamily(),
+      fontFamily: resolveFontStack(this.settings?.get('editor.fontFamily')),
       lineHeight: this.settings?.get('editor.lineHeight') ?? 1.55,
-      tabSize: this.settings?.get('editor.tabSize') ?? 2,
+      tabSize: this.settings?.get('editor.tabSize') ?? 4,
       insertSpaces: this.settings?.get('editor.insertSpaces') !== false,
-      wordWrap: (this.settings?.get('editor.wordWrap') ?? 'off') !== 'off',
+      wordWrap,
+      wrapColumn,
+      cursorBlink: this.settings?.get('editor.cursorBlink') !== false,
+      scrollPastEnd: this.settings?.get('editor.scrollPastEnd') !== false,
     };
   }
 
-  #fontFamily() {
-    const value = this.settings?.get('editor.fontFamily') ?? 'JetBrains Mono';
-    if (!value || value === 'default') return '';
-    return `"${value}", var(--font-mono)`;
+  /**
+   * Extensions that depend on settings: line numbers, folding, bracket helpers, multi-cursor,
+   * whitespace, autocompletion and scroll behaviour. Rebuilt through `#features`.
+   */
+  #featureExtensions() {
+    const settings = this.settings;
+    const on = (key, fallback = true) => (settings ? settings.get(key) ?? fallback : fallback);
+    const extensions = [];
+
+    if (on('editor.lineNumbers')) extensions.push(lineNumbers());
+    if (on('editor.highlightActiveLine')) extensions.push(highlightActiveLineGutter(), highlightActiveLine());
+    if (on('editor.foldGutter')) extensions.push(foldGutter());
+    if (on('editor.matchBrackets')) extensions.push(bracketMatching());
+    if (on('editor.autoCloseBrackets')) extensions.push(closeBrackets());
+    if (on('editor.highlightSelectionMatches')) {
+      extensions.push(highlightSelectionMatches({ highlightMatches: true, minSelectionLength: 2 }));
+    }
+    if (on('editor.showWhitespace')) extensions.push(highlightWhitespace());
+    if (on('editor.scrollPastEnd')) extensions.push(scrollPastEnd());
+
+    // Multi-cursor: several selections, rectangular selection and the crosshair cursor.
+    if (on('editor.multiCursor')) {
+      extensions.push(
+        EditorState.allowMultipleSelections.of(true),
+        rectangularSelection(),
+        crosshairCursor(),
+      );
+    }
+
+    if (on('editor.autocomplete')) {
+      extensions.push(autocompletion({
+        override: [this.#completionSource()],
+        activateOnTyping: true,
+        maxRenderedOptions: Math.max(10, settings?.get('editor.maxCompletionItems') ?? 120),
+        closeOnBlur: true,
+        icons: true,
+        defaultKeymap: true,
+      }));
+    }
+
+    return extensions;
+  }
+
+  /** Real syntax highlighting, toggleable from the settings. */
+  #highlightExtension() {
+    const enabled = this.settings ? this.settings.get('editor.syntaxHighlighting') !== false : true;
+    return enabled ? syntaxHighlighting(luaHighlightStyle) : [];
+  }
+
+  /**
+   * Linter configuration driven by the settings:
+   *  - `editor.analysisEnabled` turns analysis off entirely;
+   *  - `editor.analysisMode = 'manual'` keeps diagnostics out of the typing path
+   *    (they appear when the user runs «Analizar ahora»);
+   *  - `editor.lintOnType = false` only analyses on save/explicit request;
+   *  - `editor.analysisDelayMs` is the real debounce used by CodeMirror's linter.
+   */
+  #lintExtension() {
+    const enabled = this.settings ? this.settings.get('editor.analysisEnabled') !== false : true;
+    const mode = this.settings?.get('editor.analysisMode') ?? 'strict';
+    const onType = this.settings ? this.settings.get('editor.lintOnType') !== false : true;
+    if (!enabled || mode === 'manual') return linter(() => Promise.resolve([]), { delay: 1000 });
+    const delay = Math.max(120, this.settings?.get('editor.analysisDelayMs') ?? 500);
+    return linter(this.#linterSource(), {
+      delay,
+      // With `lintOnType` off, diagnostics are not recomputed while typing; they refresh when the
+      // document is saved or when the user asks for them (Ctrl+Shift+A → `analyzeNow`).
+      needsRefresh: (update) => (onType ? update.docChanged || update.viewportChanged : false),
+    });
   }
 
   #wireSettings() {
@@ -179,7 +242,19 @@ export class EditorManager {
       if (changed.includes('appearance.theme') || detail.reason === 'theme') this.reconfigureTheme();
       if (changed.includes('performance.lowPerformanceMode') || changed.includes('performance.reducedAnimations')) this.#applyPerformanceFlags();
       if (changed.includes('editor.minimap') || changed.includes('performance.lowPerformanceMode')) this.#wireMinimap();
-      if (changed.includes('editor.lintOnType') || changed.includes('editor.analysisDebounceMs') || changed.includes('editor.analysisMode')) this.reconfigureLint();
+      const lintKeys = ['editor.lintOnType', 'editor.analysisDelayMs', 'editor.analysisMode', 'editor.analysisEnabled', 'editor.syntaxHighlighting'];
+      if (changed.some((key) => lintKeys.includes(key))) {
+        this.#dispatchReconfigure([
+          this.#lint.reconfigure(this.#lintExtension()),
+          this.#highlight.reconfigure(this.#highlightExtension()),
+        ]);
+      }
+      const featureKeys = ['editor.lineNumbers', 'editor.foldGutter', 'editor.matchBrackets', 'editor.autoCloseBrackets',
+        'editor.highlightSelectionMatches', 'editor.showWhitespace', 'editor.multiCursor', 'editor.autocomplete',
+        'editor.maxCompletionItems', 'editor.highlightActiveLine', 'editor.scrollPastEnd'];
+      if (changed.some((key) => featureKeys.includes(key))) {
+        this.#dispatchReconfigure([this.#features.reconfigure(this.#featureExtensions())]);
+      }
     });
     this.themeManager?.subscribe(() => this.reconfigureTheme());
     this.#applyPerformanceFlags();
@@ -188,7 +263,12 @@ export class EditorManager {
   /** Pushes the current settings into the live editor (no rebuild, cursor preserved). */
   reconfigure() {
     if (!this.#view) return { ok: false };
-    this.#view.dispatch({ effects: this.#appearance.reconfigure(buildAppearanceExtensions(this.#appearanceOptions())) });
+    this.#dispatchReconfigure([
+      this.#appearance.reconfigure(buildAppearanceExtensions(this.#appearanceOptions())),
+      this.#features.reconfigure(this.#featureExtensions()),
+      this.#highlight.reconfigure(this.#highlightExtension()),
+      this.#lint.reconfigure(this.#lintExtension()),
+    ]);
     return { ok: true, fontSize: this.settings?.get('editor.fontSize') };
   }
 
@@ -202,13 +282,18 @@ export class EditorManager {
 
   reconfigureLint() {
     if (!this.#view) return { ok: false };
-    this.#view.dispatch({
-      effects: this.#lint.reconfigure(linter(this.#linterSource(), {
-        delay: Math.max(200, this.settings?.get('editor.analysisDebounceMs') ?? 500),
-        needsRefresh: (update) => update.docChanged || update.viewportChanged,
-      })),
-    });
+    this.#dispatchReconfigure([this.#lint.reconfigure(this.#lintExtension())]);
     return { ok: true };
+  }
+
+  /** Applies one or more compartment reconfigurations to every open document. */
+  #dispatchReconfigure(effects) {
+    if (!this.#view) return;
+    this.#view.dispatch({ effects });
+    for (const document of this.#documents.values()) {
+      if (document.id === this.#activeId) continue;
+      document.state = document.state.update({ effects }).state;
+    }
   }
 
   #applyPerformanceFlags() {
@@ -512,6 +597,7 @@ export class EditorManager {
       if (!document || document.dialect !== Dialect.LUAU) return [];
       if (this.settings?.get('editor.lintOnType') === false) return [];
       if (this.settings?.get('editor.analysisMode') === 'manual') return [];
+      if (this.settings?.get('editor.analysisEnabled') === false) return [];
       if (!this.analysis.supported) {
         if (this.#diagnostics.get(document.id)?.unavailable !== true) {
           this.#diagnostics.set(document.id, { diagnostics: [], unavailable: true, reason: this.analysis.reason });
@@ -565,7 +651,7 @@ export class EditorManager {
       return;
     }
     if (this.#lintTimer) clearTimeout(this.#lintTimer);
-    const delay = Math.max(250, this.settings?.get('editor.analysisDebounceMs') ?? 500);
+    const delay = Math.max(120, this.settings?.get('editor.analysisDelayMs') ?? 500);
     this.#lintTimer = setTimeout(() => {
       this.#lintTimer = null;
       if (this.#view) forceLinting(this.#view);

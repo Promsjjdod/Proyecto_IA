@@ -73,9 +73,11 @@ export class Lua54ChildEngine extends BaseEngine {
         data: { error: outcome.error },
       };
     }
-    const version = outcome.result?.values?.[0] ?? 'desconocida';
-    if (!String(version).includes('42')) {
-      return { state: CapabilityState.UNAVAILABLE, detail: `Resultado inesperado en la prueba: ${version}`, data: {} };
+    // Return values are `{type, value}` descriptors (normalised for the API); unwrap for the probe.
+    const raw = outcome.result?.values?.[0] ?? null;
+    const version = raw && typeof raw === 'object' && 'value' in raw ? raw.value : raw;
+    if (!String(version ?? '').includes('42')) {
+      return { state: CapabilityState.UNAVAILABLE, detail: `Resultado inesperado en la prueba: ${JSON.stringify(raw)}`, data: { raw } };
     }
     return {
       state: CapabilityState.AVAILABLE,
