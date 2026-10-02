@@ -1,0 +1,5 @@
+# raw AI generation sheets (24 MB) — kept locally for re-slicing, regenerate with tools/process_assets.py
+assets/_raw/
+node_modules/
+__pycache__/
+.DS_Store

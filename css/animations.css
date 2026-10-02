@@ -1,0 +1,52 @@
+/* TINY TOADS — keyframes (all loopable, GPU-friendly: transform/opacity only) */
+@keyframes loaderBob { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-10px) rotate(3deg); } }
+@keyframes logoBob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-3px) rotate(2deg); } }
+@keyframes gemPulse { 0%,100% { transform: translateY(-50%) scale(1); } 50% { transform: translateY(-50%) scale(1.08); } }
+@keyframes shine { 0% { left: -60%; } 18% { left: 130%; } 100% { left: 130%; } }
+@keyframes jackpotHit { 0% { transform: scale(1); } 30% { transform: scale(1.14) rotate(-2deg); } 60% { transform: scale(1.06) rotate(2deg); } 100% { transform: scale(1); } }
+@keyframes windowGlow { from { box-shadow: 0 0 0 3px var(--brass), 0 0 0 5px var(--ink), inset 0 0 40px rgba(0,0,0,.6), 0 0 24px rgba(255,201,48,.3); } to { box-shadow: 0 0 0 3px #fff3c4, 0 0 0 5px var(--ink), inset 0 0 40px rgba(0,0,0,.6), 0 0 48px rgba(255,201,48,.75); } }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes spinBreath { 0%,100% { transform: translateY(-3px) scale(1); } 50% { transform: translateY(-3px) scale(1.04); } }
+@keyframes glowPulse { 0%,100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes sparkle { 0%,70%,100% { opacity: 0; transform: scale(.4) rotate(0); } 80% { opacity: 1; transform: scale(1.2) rotate(40deg); } 90% { opacity: 0; transform: scale(.4) rotate(80deg); } }
+@keyframes rotate { to { transform: rotate(360deg); } }
+@keyframes spinWin { from { transform: scale(1) rotate(-3deg); } to { transform: scale(1.08) rotate(3deg); } }
+@keyframes titlePop { 0% { transform: scale(.3) rotate(-8deg); } 60% { transform: scale(1.15) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
+@keyframes hueShift { to { filter: drop-shadow(0 5px 0 var(--ink)) drop-shadow(0 0 28px rgba(255,201,48,.7)) hue-rotate(360deg); } }
+@keyframes toadParty { from { transform: translateY(0) scale(1.02,.96); } to { transform: translateY(-26px) scale(.96,1.04); } }
+
+/* Character procedural states (applied to .toad img) */
+.toad img.anim-idle    { animation: toadBreath 2.8s ease-in-out infinite; }
+.toad img.anim-blink   { animation: toadBlink .16s ease-in-out 1; }
+.toad img.anim-happy   { animation: toadHappy .5s var(--ease-out-back) 2; }
+.toad img.anim-excited { animation: toadExcited .18s ease-in-out 8; }
+.toad img.anim-win     { animation: toadWin .55s ease-in-out infinite alternate; }
+.toad img.anim-jump    { animation: toadJump .7s var(--ease-out) 1; }
+.toad img.anim-shocked { animation: toadShocked .12s ease-in-out 6; }
+.toad--right img.anim-idle    { animation-name: toadBreathR; }
+.toad--right img.anim-blink   { animation-name: toadBlinkR; }
+.toad--right img.anim-happy   { animation-name: toadHappyR; }
+.toad--right img.anim-excited { animation-name: toadExcitedR; }
+.toad--right img.anim-win     { animation-name: toadWinR; }
+.toad--right img.anim-jump    { animation-name: toadJumpR; }
+.toad--right img.anim-shocked { animation-name: toadShockedR; }
+
+@keyframes toadBreath  { 0%,100% { transform: scale(1,1); } 50% { transform: scale(1.025,.975); } }
+@keyframes toadBlink   { 0%,100% { transform: scale(1,1); } 50% { transform: scale(1.04,.93); } }
+@keyframes toadHappy   { 0% { transform: scale(1); } 40% { transform: scale(1.08,.92) translateY(0); } 70% { transform: scale(.96,1.06) translateY(-10px); } 100% { transform: scale(1) translateY(0); } }
+@keyframes toadExcited { 0%,100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(4deg) translateY(-6px); } }
+@keyframes toadWin     { from { transform: translateY(0) scale(1.03,.97); } to { transform: translateY(-30px) scale(.97,1.05); } }
+@keyframes toadJump    { 0% { transform: scale(1.1,.9); } 35% { transform: translateY(-46px) scale(.95,1.08); } 70% { transform: translateY(0) scale(1.08,.92); } 100% { transform: scale(1); } }
+@keyframes toadShocked { 0%,100% { transform: translateX(0) scale(1.02,1.05); } 50% { transform: translateX(-4px) scale(1.02,1.05); } }
+/* mirrored versions for right toad */
+@keyframes toadBreathR  { 0%,100% { transform: scaleX(-1) scale(1,1); } 50% { transform: scaleX(-1) scale(1.025,.975); } }
+@keyframes toadBlinkR   { 0%,100% { transform: scaleX(-1); } 50% { transform: scaleX(-1) scale(1.04,.93); } }
+@keyframes toadHappyR   { 0% { transform: scaleX(-1); } 40% { transform: scaleX(-1) scale(1.08,.92); } 70% { transform: scaleX(-1) scale(.96,1.06) translateY(-10px); } 100% { transform: scaleX(-1); } }
+@keyframes toadExcitedR { 0%,100% { transform: scaleX(-1) rotate(4deg); } 50% { transform: scaleX(-1) rotate(-4deg) translateY(-6px); } }
+@keyframes toadWinR     { from { transform: scaleX(-1) translateY(0) scale(1.03,.97); } to { transform: scaleX(-1) translateY(-30px) scale(.97,1.05); } }
+@keyframes toadJumpR    { 0% { transform: scaleX(-1) scale(1.1,.9); } 35% { transform: scaleX(-1) translateY(-46px) scale(.95,1.08); } 70% { transform: scaleX(-1) translateY(0) scale(1.08,.92); } 100% { transform: scaleX(-1); } }
+@keyframes toadShockedR { 0%,100% { transform: scaleX(-1) scale(1.02,1.05); } 50% { transform: scaleX(-1) translateX(-4px) scale(1.02,1.05); } }
+
+/* Reduced motion */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+@media (prefers-reduced-motion: reduce) { .spin, .logo__icon, .jackpot__icon, .jackpot__shine { animation: none !important; } }

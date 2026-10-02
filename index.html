@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Tiny Toads — Arcade Slot Demo (créditos virtuales)</title>
+  <meta name="description" content="Tiny Toads: demo ficticia de tragamonedas arcade en un pantano tropical. Solo créditos virtuales, sin dinero real." />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon_32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/icons/favicon_64.png" />
+  <link rel="apple-touch-icon" href="assets/icons/icon_192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Lilita+One&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body>
+  <!-- Loader -->
+  <div id="loader" class="loader">
+    <img class="loader__icon" src="assets/logo/tiny_toads_icon_512.png" alt="" />
+    <div class="loader__title">TINY TOADS</div>
+    <div class="loader__bar"><div class="loader__fill" id="loaderFill"></div></div>
+    <div class="loader__hint">Demo ficticia · Solo créditos virtuales</div>
+  </div>
+
+  <!-- Stage: designed at 1280x720, scaled to fit any viewport -->
+  <div id="stage" class="stage" aria-label="Tiny Toads arcade slot demo">
+    <!-- Background layers (independently animated) -->
+    <canvas id="bgBack"  class="layer layer--bg"  width="1280" height="720"></canvas>
+    <canvas id="bgMid"   class="layer layer--bg"  width="1280" height="720"></canvas>
+    <canvas id="bgFront" class="layer layer--bg"  width="1280" height="720"></canvas>
+
+    <!-- TOP HUD -->
+    <header class="hud-top">
+      <a class="logo" href="#" aria-label="Tiny Toads">
+        <img class="logo__icon" src="assets/logo/tiny_toads_icon_512.png" alt="" />
+        <span class="logo__text"><span class="logo__tiny">TINY</span><span class="logo__toads">TOADS</span></span>
+      </a>
+
+      <div class="jackpots" id="jackpots">
+        <div class="jackpot jackpot--grand" data-tier="grand">
+          <div class="jackpot__icon"></div>
+          <div class="jackpot__label">GRAND</div>
+          <div class="jackpot__value" data-value>0</div>
+          <div class="jackpot__shine"></div>
+        </div>
+        <div class="jackpot jackpot--major" data-tier="major">
+          <div class="jackpot__icon"></div>
+          <div class="jackpot__label">MAJOR</div>
+          <div class="jackpot__value" data-value>0</div>
+          <div class="jackpot__shine"></div>
+        </div>
+        <div class="jackpot jackpot--minor" data-tier="minor">
+          <div class="jackpot__icon"></div>
+          <div class="jackpot__label">MINOR</div>
+          <div class="jackpot__value" data-value>0</div>
+          <div class="jackpot__shine"></div>
+        </div>
+        <div class="jackpot jackpot--mini" data-tier="mini">
+          <div class="jackpot__icon"></div>
+          <div class="jackpot__label">MINI</div>
+          <div class="jackpot__value" data-value>0</div>
+          <div class="jackpot__shine"></div>
+        </div>
+      </div>
+
+      <div class="hud-top__tools">
+        <button class="icon-btn" id="btnInfo" title="Información / tabla de pagos" aria-label="Información">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 10v7M12 7v.5" stroke-linecap="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnSound" title="Sonido" aria-label="Sonido" aria-pressed="true">
+          <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wave" d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnMusic" title="Música" aria-label="Música" aria-pressed="true">
+          <svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>
+        </button>
+        <button class="icon-btn" id="btnSettings" title="Ajustes" aria-label="Ajustes">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" fill="none"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- CENTER: characters + reel machine -->
+    <main class="center">
+      <div class="toad toad--left" id="toadLeft"><img alt="" draggable="false" /></div>
+
+      <section class="machine" id="machine">
+        <div class="machine__frame">
+          <div class="machine__vines machine__vines--tl"></div>
+          <div class="machine__vines machine__vines--tr"></div>
+          <div class="machine__vines machine__vines--bl"></div>
+          <div class="machine__vines machine__vines--br"></div>
+          <div class="machine__rivet machine__rivet--tl"></div>
+          <div class="machine__rivet machine__rivet--tr"></div>
+          <div class="machine__rivet machine__rivet--bl"></div>
+          <div class="machine__rivet machine__rivet--br"></div>
+          <div class="machine__window" id="reelWindow">
+            <canvas id="reels" width="700" height="384"></canvas>
+            <div class="machine__dividers">
+              <i></i><i></i><i></i><i></i>
+            </div>
+            <div class="machine__shade"></div>
+          </div>
+        </div>
+        <div class="machine__plate" id="messagePlate">¡Bienvenido a Tiny Toads! Pulsa SPIN para jugar</div>
+      </section>
+
+      <div class="toad toad--right" id="toadRight"><img alt="" draggable="false" /></div>
+    </main>
+
+    <!-- BOTTOM CONTROLS -->
+    <footer class="hud-bottom">
+      <div class="panel panel--credits">
+        <div class="panel__label">CRÉDITOS</div>
+        <div class="panel__value" id="creditsValue">1 000</div>
+        <div class="panel__sub">virtuales</div>
+      </div>
+
+      <div class="panel panel--bet">
+        <div class="panel__label">APUESTA</div>
+        <div class="bet">
+          <button class="bet__btn" id="betMinus" aria-label="Bajar apuesta">−</button>
+          <div class="panel__value" id="betValue">10</div>
+          <button class="bet__btn" id="betPlus" aria-label="Subir apuesta">+</button>
+        </div>
+      </div>
+
+      <div class="panel panel--win">
+        <div class="panel__label">GANANCIA</div>
+        <div class="panel__value panel__value--gold" id="winValue">0</div>
+      </div>
+
+      <div class="controls">
+        <button class="pill-btn" id="btnAuto" aria-pressed="false">
+          <span class="pill-btn__label">AUTO</span>
+          <span class="pill-btn__count" id="autoCount"></span>
+        </button>
+
+        <button class="spin" id="btnSpin" data-state="idle" aria-label="Girar">
+          <span class="spin__glow"></span>
+          <span class="spin__ring">
+            <svg viewBox="0 0 120 120" class="spin__arrows">
+              <defs>
+                <linearGradient id="arrowGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#FFE7A3"/><stop offset="1" stop-color="#F5B445"/>
+                </linearGradient>
+              </defs>
+              <path d="M60 14 A46 46 0 0 1 104 50" fill="none" stroke="url(#arrowGrad)" stroke-width="9" stroke-linecap="round"/>
+              <path d="M98 28 L108 52 L84 48 Z" fill="#FFE7A3"/>
+              <path d="M60 106 A46 46 0 0 1 16 70" fill="none" stroke="url(#arrowGrad)" stroke-width="9" stroke-linecap="round"/>
+              <path d="M22 92 L12 68 L36 72 Z" fill="#FFE7A3"/>
+            </svg>
+          </span>
+          <span class="spin__core">
+            <span class="spin__label">SPIN</span>
+          </span>
+          <span class="spin__sparkle spin__sparkle--a"></span>
+          <span class="spin__sparkle spin__sparkle--b"></span>
+        </button>
+
+        <button class="pill-btn pill-btn--small" id="btnTurbo" aria-pressed="false" title="Turbo">
+          <span class="pill-btn__label">TURBO</span>
+        </button>
+      </div>
+    </footer>
+
+    <!-- FX overlay (particles, win text, flashes) -->
+    <canvas id="fx" class="layer layer--fx" width="1280" height="720"></canvas>
+    <div class="dim" id="dim"></div>
+    <div class="win-banner" id="winBanner" aria-live="polite">
+      <div class="win-banner__title" id="winTitle">BIG WIN</div>
+      <div class="win-banner__amount" id="winAmount">0</div>
+      <div class="win-banner__toads" id="winToads"></div>
+    </div>
+
+    <!-- Info modal -->
+    <div class="modal" id="modalInfo" hidden>
+      <div class="modal__card">
+        <button class="modal__close" id="modalClose" aria-label="Cerrar">×</button>
+        <h2>Tiny Toads · Tabla de pagos</h2>
+        <p class="modal__note">Juego de demostración ficticio. Solo créditos virtuales: no hay dinero real, apuestas reales, pagos ni retiros.</p>
+        <div class="paytable" id="paytable"></div>
+        <ul class="modal__rules">
+          <li>5 columnas × 3 filas · 10 líneas de pago de izquierda a derecha.</li>
+          <li><b>WILD</b> sustituye a todos los símbolos excepto SCATTER y BONUS.</li>
+          <li><b>SCATTER</b> ×3 o más en cualquier posición paga y enciende los Toads.</li>
+          <li><b>BONUS</b> ×3 o más dispara la celebración de los Tiny Toads.</li>
+          <li>Botón <b>AUTO</b>: 10 giros automáticos. <b>TURBO</b>: giros más cortos.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div class="modal" id="modalSettings" hidden>
+      <div class="modal__card modal__card--small">
+        <button class="modal__close" id="settingsClose" aria-label="Cerrar">×</button>
+        <h2>Ajustes</h2>
+        <label class="setting"><span>Calidad de efectos</span>
+          <select id="setQuality"><option value="high">Alta</option><option value="medium">Media</option><option value="low">Baja</option></select>
+        </label>
+        <label class="setting"><span>Reducir movimiento</span><input type="checkbox" id="setReduceMotion" /></label>
+        <label class="setting"><span>Reiniciar créditos virtuales</span><button class="pill-btn pill-btn--small" id="btnResetCredits">RESET</button></label>
+        <p class="modal__note">Demo visual · créditos virtuales únicamente.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">DEMO FICTICIA · SIN DINERO REAL · CRÉDITOS VIRTUALES</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

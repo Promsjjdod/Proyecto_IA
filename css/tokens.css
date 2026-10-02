@@ -1,0 +1,61 @@
+/* TINY TOADS — design tokens (see docs/ART_DIRECTION.md) */
+:root {
+  /* world */
+  --swamp-deep: #06202e;
+  --swamp-water: #0e7490;
+  --swamp-turquoise: #22d3ee;
+  --swamp-foam: #a5f3fc;
+  --leaf-dark: #14532d;
+  --leaf: #22c55e;
+  --leaf-light: #86efac;
+  /* machine */
+  --wood-dark: #3b1f0e;
+  --wood: #7c4a1e;
+  --wood-light: #c98a4b;
+  --brass: #f5b445;
+  --brass-light: #ffe7a3;
+  /* accents */
+  --gold: #ffc930;
+  --gold-deep: #c77a00;
+  --magenta: #f43f8e;
+  --violet: #8b5cf6;
+  --lime: #bef264;
+  --ink: #1b2a1f;
+  --paper: #fff8e7;
+
+  /* jackpot tiers */
+  --tier-grand: #ffc930;
+  --tier-major: #f43f8e;
+  --tier-minor: #22d3ee;
+  --tier-mini: #22c55e;
+
+  /* typography */
+  --font-display: 'Lilita One', 'Fredoka', 'Arial Rounded MT Bold', Impact, sans-serif;
+  --font-ui: 'Fredoka', 'Nunito', 'Segoe UI', system-ui, sans-serif;
+
+  /* text styles */
+  --stroke-ink: 0 0 0 2px var(--ink);
+  --shadow-hard: 0 3px 0 var(--ink);
+  --shadow-soft: 0 6px 18px rgba(6, 32, 46, 0.45);
+
+  /* layout */
+  --stage-w: 1280;
+  --stage-h: 720;
+  --radius-panel: 18px;
+  --radius-pill: 999px;
+
+  /* motion */
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 120ms;
+  --t-med: 260ms;
+}
+
+/* Type scale (applied at 1280x720 stage scale) */
+.t-title   { font-family: var(--font-display); font-size: 40px; letter-spacing: 1px; }
+.t-jackpot { font-family: var(--font-display); font-size: 22px; }
+.t-win     { font-family: var(--font-display); font-size: 96px; }
+.t-button  { font-family: var(--font-ui); font-weight: 700; font-size: 16px; letter-spacing: .04em; text-transform: uppercase; }
+.t-hud     { font-family: var(--font-ui); font-weight: 600; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.t-numbers { font-family: var(--font-ui); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; }
+.t-small   { font-family: var(--font-ui); font-weight: 500; font-size: 11px; opacity: .7; }
