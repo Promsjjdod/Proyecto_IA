@@ -22,6 +22,8 @@ Añade `#debug` a la URL para ver en consola los hooks visuales de audio.
 
 Controles: **SPIN** (o `Espacio`/`Enter`), **AUTO** (10 giros), **TURBO**, apuesta −/+, info (tabla de pagos), ajustes (calidad, reducir movimiento, reset de créditos).
 
+**Panel ADMIN (cheat, solo demo):** `Ctrl+Shift+A`, escribir `toads` o abrir con `#admin` · PIN `1234` (ver `docs/ADMIN.md`).
+
 ## Arquitectura
 
 | Capa | Tecnología | Archivos |

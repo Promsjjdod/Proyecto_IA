@@ -77,3 +77,6 @@ export const TIMING = {
   normal: { accel: 260, spinMin: 900, stagger: 240, decel: 420 },
   turbo:  { accel: 140, spinMin: 350, stagger: 110, decel: 260 },
 };
+
+// ADMIN cheat panel (solo demo). Cambia este PIN antes de compartir la build.
+export const ADMIN_PIN = '1234';

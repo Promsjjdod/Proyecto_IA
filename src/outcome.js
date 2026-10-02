@@ -73,3 +73,33 @@ export function evaluate(grid, bet) {
   const totalWin = lines.reduce((s, l) => s + l.pay, 0) + scatterPay + bonusPay;
   return { total: totalWin, lines, scatters, bonuses, scatterPay, bonusPay, cells, scatterCells: scCells, bonusCells: boCells };
 }
+
+/* ---------------- ADMIN / DEBUG: forced outcomes ---------------- */
+const filler = () => { let s; do { s = pick(); } while (SYMBOLS[s].wild || SYMBOLS[s].scatter || SYMBOLS[s].bonus); return s; };
+function blank() { return Array.from({ length: REELS }, () => Array.from({ length: ROWS }, filler)); }
+function noWin(bet) { for (let i = 0; i < 500; i++) { const g = blank(); if (evaluate(g, bet).total === 0) return g; } return blank(); }
+
+/** kind: lose | small | medium | big | mega | bonus | scatter | anticipation | win */
+export function forcedOutcome(kind, bet) {
+  const tierOf = g => { const m = evaluate(g, bet).total / bet; return m <= 0 ? 'lose' : m < 5 ? 'small' : m < 15 ? 'medium' : m < 40 ? 'big' : 'mega'; };
+  // 1) try random search first (keeps results natural-looking)
+  if (['lose', 'small', 'medium', 'big', 'mega'].includes(kind)) {
+    for (let i = 0; i < 4000; i++) { const g = generateOutcome(); if (tierOf(g) === kind) return g; }
+  }
+  if (kind === 'win') { for (let i = 0; i < 500; i++) { const g = generateOutcome(); if (evaluate(g, bet).total > 0) return g; } }
+  // 2) crafted fallbacks (middle row = payline 0)
+  const g = noWin(bet);
+  const row = (sym, n = REELS, r = 1) => { for (let i = 0; i < n; i++) g[i][r] = sym; };
+  switch (kind) {
+    case 'small':  row('ten', 3); break;
+    case 'medium': row('rock', 4); break;
+    case 'big':    row('lilypad', 5); break;
+    case 'mega':   row('wild', 5, 0); row('wild', 5, 1); row('wild', 5, 2); break;
+    case 'bonus':  g[0][0] = 'bonus'; g[2][1] = 'bonus'; g[4][2] = 'bonus'; break;
+    case 'scatter': g[0][1] = 'scatter'; g[1][2] = 'scatter'; g[3][0] = 'scatter'; break;
+    case 'anticipation': g[0][0] = 'scatter'; g[1][2] = 'scatter'; break; // 2 scatters → reels 3-5 slow down, no win
+    case 'win': row('frog', 3); break;
+    case 'lose': default: return g;
+  }
+  return g;
+}

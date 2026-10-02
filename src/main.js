@@ -4,7 +4,8 @@ import { preload, warmHD } from './assets.js';
 import { Background } from './background.js';
 import { Particles } from './particles.js';
 import { ReelEngine } from './reels.js';
-import { generateOutcome, evaluate } from './outcome.js';
+import { generateOutcome, evaluate, forcedOutcome } from './outcome.js';
+import { initAdmin } from './admin.js';
 import { Toad } from './characters.js';
 import { UI, fmt } from './ui.js';
 import { events, AUDIO_HOOKS } from './events.js';
@@ -17,6 +18,9 @@ const state = {
   auto: 0,
   quality: localStorage.getItem('tt_quality') || 'high',
   lastWin: 0,
+  forceNext: null,   // admin: 'lose'|'small'|'medium'|'big'|'mega'|'bonus'|'scatter'|'anticipation'
+  alwaysWin: false,  // admin
+  freeSpins: false,  // admin: no descuenta apuesta
 };
 const bet = () => BET_STEPS[state.betIndex];
 
@@ -96,11 +100,15 @@ function spin() {
   if (state.credits < b) { ui.message('Sin créditos virtuales — usa RESET en ajustes'); stopAuto(); return; }
   state.busy = true;
   ui.hideBanner(); reels.setHighlight(null); ui.machine.classList.remove('is-win');
-  state.credits -= b; save(); ui.setCredits(state.credits); ui.setWin(0);
+  if (!state.freeSpins) state.credits -= b;
+  save(); ui.setCredits(state.credits); ui.setWin(0);
   ui.setSpinState('spinning'); ui.message(state.auto ? `AUTO · ${state.auto} giros restantes` : '¡Buena suerte, Tiny Toads!');
   toads.forEach(t => t.react('spin'));
 
-  const outcome = generateOutcome();
+  let outcome;
+  if (state.forceNext) { outcome = forcedOutcome(state.forceNext, b); state.forceNext = null; }
+  else if (state.alwaysWin) outcome = forcedOutcome('win', b);
+  else outcome = generateOutcome();
   reels.spin(outcome, (grid) => onStopped(grid));
 }
 
@@ -196,5 +204,18 @@ function loop(now) {
 }
 requestAnimationFrame(loop);
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
+
+/* ---------- Admin cheat panel (oculto, PIN) ---------- */
+initAdmin({
+  state, ui, toads, spin, coinRain,
+  message: (t) => ui.message(t),
+  addCredits: (n) => { state.credits = Math.max(0, state.credits + n); save(); ui.setCredits(state.credits); },
+  setCredits: (n) => { state.credits = Math.max(0, n); save(); ui.setCredits(state.credits); },
+  forceNext: (k) => { state.forceNext = k; },
+  autoplay: (n) => { state.auto = n; ui.auto.setAttribute('aria-pressed', 'true'); ui.autoCount.textContent = n; if (!state.busy) spin(); },
+  celebrate: (tier) => { ui.showBanner(tier, tier === 'mega' ? 'MEGA WIN' : 'BIG WIN', state.lastWin || 1234); starBurst(640, 300, 30); coinRain(30, 2000); if (tier === 'mega') rays = 1; setTimeout(() => { ui.hideBanner(); rays = 0; }, 3500); },
+  liveParticles: () => fx.pool.filter(p => p.alive).length,
+  reelsSpinning: () => reels.spinning,
+});
 
 console.info('%cTINY TOADS%c demo ficticia · créditos virtuales · sin dinero real', 'font-weight:bold;color:#bef264', 'color:#a5f3fc');

@@ -51,3 +51,6 @@ glow ring + pulso de escala (winning), atenuación + desaturación (disabled), m
 ## Hooks visuales para audio (`src/events.js`)
 `spin`, `reelStop`, `symbolLand`, `win`, `bigWin`, `jackpot`, `click`, `bonus`, `scatter`
 — añade `#debug` a la URL para verlos en consola.
+
+## Panel ADMIN (cheat · solo demo)
+Ver `docs/ADMIN.md`.
