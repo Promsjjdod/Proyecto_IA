@@ -1,0 +1,27 @@
+{
+  "id": "csv-insight",
+  "name": "CSV Insight",
+  "description": "Parses CSV files from the workspace and returns column stats (row count, numeric min/max/avg, top values). Pure local processing.",
+  "icon": "▤",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Productivity",
+  "permissions": [
+    "READ_FILES"
+  ],
+  "tools": [],
+  "configSchema": {
+    "fields": [
+      {
+        "name": "max_rows",
+        "label": "Max rows parsed",
+        "type": "number",
+        "placeholder": "5000"
+      }
+    ]
+  },
+  "defaultStatus": "installed",
+  "defaultConfig": {
+    "max_rows": 5000
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "file-explorer",
+  "name": "File Explorer",
+  "description": "Read-only access to the workspace filesystem: read files, list directories and search names or content. Path traversal is blocked.",
+  "icon": "⌸",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Files",
+  "permissions": [
+    "READ_FILES"
+  ],
+  "tools": [
+    "read_file",
+    "list_dir",
+    "search_files"
+  ],
+  "configSchema": {
+    "fields": []
+  },
+  "defaultStatus": "enabled"
+}

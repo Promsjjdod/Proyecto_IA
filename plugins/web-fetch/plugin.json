@@ -1,0 +1,37 @@
+{
+  "id": "web-fetch",
+  "name": "Web Fetch",
+  "description": "Fetch public web pages and call external HTTP APIs. Local/private network addresses are blocked by the SSRF guard.",
+  "icon": "🌐",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Search",
+  "permissions": [
+    "NETWORK_ACCESS"
+  ],
+  "tools": [
+    "fetch_url",
+    "http_request"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "name": "user_agent",
+        "label": "User-Agent header",
+        "type": "string",
+        "placeholder": "ForgeAI/0.1 (+local workspace)"
+      },
+      {
+        "name": "max_chars",
+        "label": "Max characters returned",
+        "type": "number",
+        "placeholder": "6000"
+      }
+    ]
+  },
+  "defaultStatus": "enabled",
+  "defaultConfig": {
+    "user_agent": "ForgeAI/0.1 (+local workspace)",
+    "max_chars": 6000
+  }
+}

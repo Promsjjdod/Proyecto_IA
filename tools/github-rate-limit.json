@@ -1,0 +1,15 @@
+{
+  "id": "github_rate_limit",
+  "kind": "http",
+  "description": "Return the current public GitHub API rate-limit status for this machine's IP.",
+  "permissions": ["NETWORK_ACCESS"],
+  "dangerous": false,
+  "input": [
+    { "name": "note", "type": "string", "description": "Optional note echoed back with the result", "optional": true }
+  ],
+  "endpoint": {
+    "method": "GET",
+    "url": "https://api.github.com/rate_limit",
+    "headers": { "Accept": "application/vnd.github+json" }
+  }
+}

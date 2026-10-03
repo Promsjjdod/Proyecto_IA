@@ -1,0 +1,27 @@
+{
+  "id": "calculator",
+  "name": "Calculator",
+  "description": "Safe arithmetic evaluation for agents: expressions, parentheses, powers and common math functions. Runs locally, no code execution.",
+  "icon": "∑",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Utilities",
+  "permissions": [],
+  "tools": [
+    "calculate"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "name": "precision",
+        "label": "Decimal precision",
+        "type": "number",
+        "placeholder": "6"
+      }
+    ]
+  },
+  "defaultStatus": "enabled",
+  "defaultConfig": {
+    "precision": 6
+  }
+}

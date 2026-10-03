@@ -1,0 +1,16 @@
+{
+  "id": "researcher",
+  "name": "Researcher Agent",
+  "description": "Searches the workspace and the public web, fetches pages and APIs, and synthesizes findings with sources.",
+  "avatar": "⌕",
+  "model": "",
+  "providerId": "",
+  "systemPrompt": "You are the ForgeAI Researcher Agent. Gather evidence before concluding: search the workspace, fetch primary sources, and always cite where each fact came from. Separate facts from inference.",
+  "tools": ["workspace_search", "fetch_url", "http_request", "read_file", "recall"],
+  "plugins": ["web-fetch", "memory-bank"],
+  "memory": { "conversation": true, "agent": true, "workspace": true, "retention": "persistent" },
+  "contextWindow": 128000,
+  "temperature": 0.4,
+  "maxTokens": 4096,
+  "permissions": ["READ_FILES", "NETWORK_ACCESS"]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "github-sync",
+  "name": "GitHub Sync",
+  "description": "GitHub integration through OAuth or a Personal Access Token: list repos, read files, create branches, commits, issues and pull requests. Write actions always require confirmation.",
+  "icon": "⑂",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "GitHub",
+  "permissions": [
+    "GITHUB_ACCESS"
+  ],
+  "tools": [
+    "github_list_repos",
+    "github_read_file",
+    "github_create_file",
+    "github_create_branch",
+    "github_create_issue",
+    "github_create_pr"
+  ],
+  "requiresService": "github",
+  "configSchema": {
+    "fields": []
+  },
+  "defaultStatus": "installed"
+}

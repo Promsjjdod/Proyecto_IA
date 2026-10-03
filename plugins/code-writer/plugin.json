@@ -1,0 +1,21 @@
+{
+  "id": "code-writer",
+  "name": "Code Writer",
+  "description": "Lets agents create and update text files inside the workspace. Every write requires explicit user confirmation.",
+  "icon": "⌨",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Developer",
+  "permissions": [
+    "WRITE_FILES",
+    "READ_FILES"
+  ],
+  "tools": [
+    "write_file",
+    "read_file"
+  ],
+  "configSchema": {
+    "fields": []
+  },
+  "defaultStatus": "installed"
+}

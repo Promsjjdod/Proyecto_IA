@@ -1,1 +1,223 @@
-# Proyecto_IA
+<p align="center">
+  <img src="assets/brand/logo-main.png" width="120" alt="ForgeAI logo" />
+</p>
+
+<h1 align="center">ForgeAI</h1>
+<p align="center"><b>Build. Think. Create.</b><br/>
+A local-first AI workspace: chat, agents, plugins, tools, files, image & video generation — served from your own machine.</p>
+
+<p align="center">
+  <img src="assets/brand/favicon-64.png" width="28" alt="" />
+  <img src="assets/brand/logo-light.png" width="56" alt="light logo" />
+  <img src="assets/brand/logo-mono-light.png" width="56" alt="mono light logo" />
+  <img src="assets/brand/logo-mono-dark.png" width="56" alt="mono dark logo" />
+</p>
+
+---
+
+## What is ForgeAI?
+
+ForgeAI is a **functional, self-hosted AI workspace**, not a mockup. One local
+server gives you:
+
+- **AI Chat** — streaming, markdown + syntax highlighting, copy code, edit &
+  regenerate, attachments (drag & drop), folders, pin/archive/search, token and
+  tokens/second stats.
+- **Providers** — OpenAI-compatible (`POST /chat/completions`), native
+  **Ollama** (live model detection: name, size, context, loaded state), fully
+  custom HTTP providers (headers, body params, response modes) and a built-in
+  **DEMO** provider so the app is explorable with zero keys.
+- **Agents** — system prompt, model, tools, plugins, memory scopes, context
+  window, temperature, max tokens, permissions. Four built-ins: Developer,
+  Researcher, Writing, Automation.
+- **WORK** — hand an agent a big task; it runs **PLAN → ANALYZE → TOOLS →
+  EXECUTE → VERIFY → RESULT** with a live progress tree of actions, tools,
+  results and errors (never private reasoning).
+- **Tools + permissions** — filesystem, terminal (allow-listed, no shell),
+  network (SSRF-guarded), search, calculator (no eval), memory, image gen and
+  six GitHub tools. Dangerous calls pause for an interactive approval.
+- **Plugins** — a real plugin manager + marketplace over pack folders
+  (`/plugins`), with states (installed/enabled/disabled/needs configuration/
+  error), encrypted configuration secrets and live config effects.
+- **File Workspace** — upload, download, preview (TXT/MD/CSV/JSON/JS/TS/PY/
+  HTML/CSS/PDF/DOCX/ZIP/images), rename, folders, search, drag & drop, plus a
+  read-only browser of the repository workspace.
+- **Image Generator** — prompt/negative/aspect/resolution/count/style, local
+  gallery in `/generated/images` with download, delete, copy prompt and
+  regenerate. **Video Generator** UI + queue (queued/generating/completed/
+  failed) with a provider interface ready to plug into.
+- **GitHub** — OAuth flow or PAT, encrypted token storage, repo listing, file
+  reads/writes, branches, commits, issues and PRs (writes need approval).
+- **Memory** — conversation / agent / workspace scopes with secret redaction.
+- **Ctrl+K** command palette + global search across chats, agents, plugins,
+  files and workspaces.
+- **System Status** — frontend/backend/database/providers/Ollama/GitHub health
+  plus a live redacted log viewer.
+
+## Quick start
+
+Requirements: **Node.js ≥ 22.12** and npm ≥ 10.
+
+```bash
+git clone <your-fork-url> ForgeAI
+cd ForgeAI
+
+# Windows
+setup.bat
+start.bat
+
+# macOS / Linux / anywhere
+npm run setup     # creates .env (+secret), installs deps, migrates & seeds
+npm run dev       # frontend http://localhost:3000 · backend http://localhost:8000
+```
+
+Then open **http://localhost:3000**. That's it — DEMO mode keeps everything
+usable until you connect a real provider.
+
+Production-style run (builds the SPA and serves it with an API proxy):
+
+```bash
+npm start         # http://localhost:3000 (static) + http://localhost:8000/api
+```
+
+### LAN access (optional)
+
+```bash
+npm run dev:lan          # or set FORGEAI_LAN=true in .env
+```
+
+Binds `0.0.0.0` so devices on **your local network** can open
+`http://IP-LOCAL:3000` (the exact URLs are printed at startup and shown in
+System Status). ForgeAI never opens Internet ports or touches firewalls.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `npm run setup` | first-run: .env + secret, deps, migrations, seed |
+| `npm run dev` | backend + frontend together (single window) |
+| `npm run dev:lan` | dev with LAN binding |
+| `npm run server` / `npm run client` | only backend / only frontend |
+| `npm start` | build + serve production bundle with /api proxy |
+| `npm run build` | build frontend bundle |
+| `npm test` | backend test suite + frontend typecheck |
+| `npm run migrate` | apply SQL migrations + seed + plugin sync |
+| `npm run db:reset -- --yes` | delete local database |
+| `npm run doctor` | environment diagnostics |
+
+Windows shortcuts: `setup.bat`, `start.bat` (both pause on errors).
+
+## Configuration
+
+Copy of `.env.example` highlights (all optional):
+
+```env
+FORGEAI_PORT=8000
+FORGEAI_FRONTEND_PORT=3000
+FORGEAI_LAN=false                 # true = bind 0.0.0.0 for local-network access
+FORGEAI_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+FORGEAI_DB_PATH=data/forgeai.db
+FORGEAI_SECRET_KEY=...            # generated by setup; encrypts stored secrets
+FORGEAI_AUTH_PASSWORD=            # set to enable the login screen
+FORGEAI_DEMO_MODE=true            # simulated provider when nothing is configured
+OPENAI_COMPATIBLE_BASE_URL=       # any OpenAI-compatible endpoint
+OPENAI_COMPATIBLE_API_KEY=
+OLLAMA_BASE_URL=http://localhost:11434
+IMAGE_PROVIDER_BASE_URL=          # OpenAI-compatible /images/generations
+GITHUB_CLIENT_ID=                 # OAuth app (callback /api/github/oauth/callback)
+GITHUB_CLIENT_SECRET=
+GITHUB_PAT=                       # alternative to OAuth
+FORGEAI_TOOL_PERMISSIONS=READ_FILES,NETWORK_ACCESS
+FORGEAI_TERMINAL_ALLOWLIST=ls,cat,rg,grep,node,npm,git,python3,tsc,vite
+```
+
+Never commit real keys: `.env` is gitignored and APIs only return masked
+previews.
+
+## Providers & Ollama
+
+- **OpenAI-compatible**: any service exposing `POST {base}/chat/completions`
+  (OpenAI, OpenRouter, LM Studio, llama.cpp, Groq, vLLM…). Configurable base
+  URL, key, headers, body params, context window, pricing, tags.
+- **Ollama**: install Ollama, `ollama pull llama3.2` — ForgeAI detects models
+  live (`/api/tags`, `/api/show`, `/api/ps`) and shows name/size/context/state.
+  Nothing is assumed installed; offline Ollama reports a clear probe error.
+- **Custom**: arbitrary endpoint with response mode `openai-sse`, `json-text`
+  or `ndjson-ollama`.
+- **Demo**: local simulated streaming, visibly badged **DEMO** everywhere.
+
+Details: [docs/providers.md](docs/providers.md).
+
+## Architecture
+
+```
+frontend (React 19 + Vite + TS, zustand, hand-rolled design system)
+   │  /api (Vite proxy in dev, HTTP proxy in prod)
+backend (Express 5, ESM JS)
+   ├── providers/   openai-compatible · ollama · custom · demo adapters
+   ├── services/    chat streaming + tool loop · WORK task runner · files ·
+   │                images · video queue · memory · search · github · settings
+   ├── tools/       registry + permission/approval pipeline
+   ├── plugins/     manager for /plugins packs
+   └── database/    Drizzle ORM over SQLite (WAL), SQL migrations
+packs:  /agents  /plugins  /providers  /tools   (JSON, user-extensible)
+data:   data/forgeai.db · data/logs/ · uploads/ · generated/{images,videos}
+```
+
+Deep dive: [docs/architecture.md](docs/architecture.md).
+
+## Security
+
+Permission groups (`READ_FILES`, `WRITE_FILES`, `EXECUTE_COMMANDS`,
+`NETWORK_ACCESS`, `GITHUB_ACCESS`) gate every tool; dangerous tools always ask
+first. Path-traversal, command-injection and SSRF guards; encrypted secrets;
+signed HttpOnly sessions; optional password login; CORS allow-list; local rate
+limiting; redacted logs; no stack traces to clients.
+Full document: [docs/security.md](docs/security.md).
+
+## Development & tests
+
+```bash
+npm test          # 18 backend tests (API, DB, providers, chat, agents,
+                  # plugins, permissions, auth, files, media, tasks) + typecheck
+npm run doctor
+```
+
+Contribution guide and workflows: [docs/development.md](docs/development.md).
+
+## Documentation
+
+| Doc | Content |
+|---|---|
+| [architecture.md](docs/architecture.md) | system design, flows, storage |
+| [providers.md](docs/providers.md) | provider kinds, config, Ollama, errors |
+| [agents.md](docs/agents.md) | agent packs, fields, memory |
+| [plugins.md](docs/plugins.md) | pack format, lifecycle, marketplace |
+| [tools.md](docs/tools.md) | tool catalogue, pipeline, hardening |
+| [github.md](docs/github.md) | OAuth/PAT setup, capabilities, safety |
+| [security.md](docs/security.md) | threat model and mitigations |
+| [development.md](docs/development.md) | workflows, troubleshooting |
+
+## Troubleshooting
+
+- **Port already in use** → change `FORGEAI_PORT` / `FORGEAI_FRONTEND_PORT`.
+- **"Unable to connect to provider"** → the chat offers Retry / Settings /
+  Change Provider; System Status shows the exact probe error.
+- **Ollama not detected** → is `ollama serve` running? Check Settings → Models
+  → Ollama or System Status.
+- **Reset everything** → `npm run db:reset -- --yes && npm run migrate`.
+- **Logs** → `data/logs/forgeai-*.log` or System Status → log viewer.
+
+## Contributing
+
+Issues and PRs welcome. Keep packs declarative where possible, route every new
+capability through the permission pipeline, add tests beside the feature, and
+never commit secrets or runtime data (`data/`, `uploads/`, `generated/` are
+gitignored).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+ForgeAI's name, logo and interface are original work; no third-party brands,
+logos or proprietary assets are included.

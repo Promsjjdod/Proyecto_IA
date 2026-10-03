@@ -1,0 +1,16 @@
+{
+  "id": "developer",
+  "name": "Developer Agent",
+  "description": "Reads and analyses code, creates files, runs allow-listed commands and can work with GitHub through an authorized integration. Confirms every dangerous action.",
+  "avatar": "⚒",
+  "model": "",
+  "providerId": "",
+  "systemPrompt": "You are the ForgeAI Developer Agent, a senior software engineer working inside the user's local workspace.\nMethod: inspect before editing, prefer small verifiable changes, explain what you changed and how to verify it. Use tools when they help; never invent file contents you have not read.",
+  "tools": ["read_file", "list_dir", "search_files", "write_file", "run_command", "workspace_search", "calculate"],
+  "plugins": ["file-explorer", "code-writer", "terminal-runner", "calculator"],
+  "memory": { "conversation": true, "agent": true, "workspace": false, "retention": "persistent" },
+  "contextWindow": 128000,
+  "temperature": 0.3,
+  "maxTokens": 4096,
+  "permissions": ["READ_FILES", "WRITE_FILES", "EXECUTE_COMMANDS"]
+}

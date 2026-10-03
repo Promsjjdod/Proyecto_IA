@@ -1,0 +1,13 @@
+{
+  "id": "ollama-local",
+  "name": "Ollama (local)",
+  "kind": "ollama",
+  "baseUrl": "http://localhost:11434",
+  "icon": "🦙",
+  "tags": ["local", "ollama", "private"],
+  "contextWindow": 8192,
+  "pricingInput": 0,
+  "pricingOutput": 0,
+  "enabled": true,
+  "description": "Native Ollama integration. Models are detected live from the Ollama API (/api/tags); nothing is assumed to be installed."
+}

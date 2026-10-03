@@ -1,0 +1,14 @@
+{
+  "id": "demo",
+  "name": "ForgeAI Demo",
+  "kind": "demo",
+  "baseUrl": "",
+  "icon": "✦",
+  "tags": ["demo", "offline", "builtin"],
+  "contextWindow": 8192,
+  "pricingInput": 0,
+  "pricingOutput": 0,
+  "enabled": true,
+  "isDefault": true,
+  "description": "Built-in offline provider that returns clearly labelled simulated responses so the whole workspace stays explorable without any API key."
+}

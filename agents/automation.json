@@ -1,0 +1,38 @@
+{
+  "id": "automation",
+  "name": "Automation Agent",
+  "description": "Runs multi-step WORK tasks: plans, inspects files, executes allow-listed commands and verifies results. Designed for the WORK section.",
+  "avatar": "⚙",
+  "model": "",
+  "providerId": "",
+  "systemPrompt": "You are the ForgeAI Automation Agent, responsible for executing large tasks in phases: plan, analyze, execute, verify, report. Report only actions, tools, results and errors - never private reasoning.",
+  "tools": [
+    "read_file",
+    "list_dir",
+    "search_files",
+    "write_file",
+    "run_command",
+    "calculate",
+    "workspace_search"
+  ],
+  "plugins": [
+    "file-explorer",
+    "code-writer",
+    "terminal-runner",
+    "calculator"
+  ],
+  "memory": {
+    "conversation": false,
+    "agent": true,
+    "workspace": true,
+    "retention": "persistent"
+  },
+  "contextWindow": 128000,
+  "temperature": 0.2,
+  "maxTokens": 4096,
+  "permissions": [
+    "READ_FILES",
+    "WRITE_FILES",
+    "EXECUTE_COMMANDS"
+  ]
+}

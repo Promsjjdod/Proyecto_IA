@@ -1,0 +1,18 @@
+{
+  "id": "image-studio",
+  "name": "Image Studio",
+  "description": "Image generation from chat and agents. Uses any OpenAI-compatible /images/generations endpoint; falls back to clearly labelled DEMO placeholders while no provider is configured.",
+  "icon": "🖼",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Media",
+  "permissions": [],
+  "tools": [
+    "generate_image"
+  ],
+  "requiresService": "image-provider",
+  "configSchema": {
+    "fields": []
+  },
+  "defaultStatus": "enabled"
+}

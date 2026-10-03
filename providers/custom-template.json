@@ -1,0 +1,16 @@
+{
+  "id": "custom",
+  "name": "Custom HTTP provider",
+  "kind": "custom",
+  "baseUrl": "",
+  "chatPath": "/chat/completions",
+  "responseMode": "openai-sse",
+  "icon": "⚙",
+  "tags": ["custom", "advanced"],
+  "contextWindow": 32000,
+  "enabled": false,
+  "template": true,
+  "description": "Blank provider with configurable base URL, API version, custom headers, custom body parameters and response mode (openai-sse | json-text | ndjson-ollama). Use it for gateways or self-hosted inference servers.",
+  "headerExamples": { "Authorization": "Bearer <key>", "X-Api-Version": "2024-06-01" },
+  "bodyParamExamples": { "top_p": 0.9, "presence_penalty": 0.1, "user": "forgeai" }
+}

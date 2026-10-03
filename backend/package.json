@@ -1,0 +1,28 @@
+{
+  "name": "@forgeai/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForgeAI backend: local API server, providers, agents, tools, plugins and SQLite persistence.",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "migrate": "node src/database/migrate.js --run",
+    "test": "node --test --test-concurrency=1 \"tests/**/*.test.js\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^18.0.5",
+    "drizzle-orm": "^0.45.3",
+    "express": "^5.2.1",
+    "fflate": "^0.8.3",
+    "helmet": "^8.3.0",
+    "multer": "^2.4.0",
+    "zod": "^4.6.5"
+  }
+}

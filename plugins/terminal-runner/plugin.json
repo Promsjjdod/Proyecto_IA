@@ -1,0 +1,19 @@
+{
+  "id": "terminal-runner",
+  "name": "Terminal Runner",
+  "description": "Allows agents to run allow-listed commands (ls, cat, rg, node, npm, git...) in the workspace. No shell operators, no arbitrary binaries, and every execution requires user confirmation. Disabled by default.",
+  "icon": "▶",
+  "version": "1.0.0",
+  "author": "ForgeAI",
+  "category": "Developer",
+  "permissions": [
+    "EXECUTE_COMMANDS"
+  ],
+  "tools": [
+    "run_command"
+  ],
+  "defaultStatus": "disabled",
+  "configSchema": {
+    "fields": []
+  }
+}

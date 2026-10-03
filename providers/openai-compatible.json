@@ -1,0 +1,16 @@
+{
+  "id": "openai-compatible",
+  "name": "OpenAI-compatible endpoint",
+  "kind": "openai-compatible",
+  "baseUrl": "https://api.openai.com/v1",
+  "chatPath": "/chat/completions",
+  "responseMode": "openai-sse",
+  "icon": "◎",
+  "tags": ["openai", "openrouter", "lm-studio", "groq", "vllm"],
+  "contextWindow": 128000,
+  "pricingInput": 0,
+  "pricingOutput": 0,
+  "enabled": false,
+  "requiresEnv": ["OPENAI_COMPATIBLE_API_KEY"],
+  "description": "Any service exposing POST {base}/chat/completions (OpenAI, OpenRouter, LM Studio, llama.cpp server, Groq, Together, vLLM...). Seeded as enabled automatically when OPENAI_COMPATIBLE_* env vars are present."
+}
