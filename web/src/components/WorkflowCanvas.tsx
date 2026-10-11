@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Activity, ArrowDown, ArrowDownToLine, Bot, Check, CirclePlay, FileText, GitBranch, Globe2, Grip, Layers3, ListChecks, Minus, Plus, Save, Settings2, Sparkles, Trash2, Workflow as WorkflowIcon, ZoomIn, ZoomOut } from 'lucide-react';
+import { Activity, ArrowDown, ArrowDownToLine, Bot, Check, CirclePlay, Copy, FileText, GitBranch, Globe2, Grip, Layers3, ListChecks, Minus, Plus, Save, Settings2, Sparkles, Trash2, Workflow as WorkflowIcon, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Agent, FlowEdge, FlowNode, Model, Provider, Workflow } from '../types';
 
 const NODE_WIDTH = 242;
@@ -20,7 +20,7 @@ const labelByType: Record<string, string> = {
 
 type Position = { x: number; y: number };
 type Gesture =
-  | { type: 'node'; id: string; startX: number; startY: number; origin: Position }
+  | { type: 'node'; ids: string[]; startX: number; startY: number; origins: Record<string, Position> }
   | { type: 'pan'; startX: number; startY: number; scrollLeft: number; scrollTop: number }
   | { type: 'connect'; sourceId: string; sourceHandle?: string };
 
@@ -34,6 +34,10 @@ type Props = {
   onConnect: (targetId: string, sourceId: string, sourceHandle?: string) => void;
   onDisconnect: (targetId: string) => void;
   onDeleteNode: (id: string) => void;
+  onDuplicateNodes?: (ids: string[]) => void;
+  onMoveNodes?: (positions: Record<string, Position>) => void;
+  onBeforeChange?: () => void;
+  isRunning?: boolean;
   onAddNode: () => void;
 };
 
@@ -50,13 +54,14 @@ function tokenLabel(value?: number | null) {
   return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value).toLocaleString() : 'sin dato';
 }
 
-export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, onMoveNode, onPatchNode, onConnect, onDisconnect, onDeleteNode, onAddNode }: Props) {
-  const [selectedId, setSelectedId] = useState(workflow.nodes[0]?.id || '');
+export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, onMoveNode, onPatchNode, onConnect, onDisconnect, onDeleteNode, onDuplicateNodes, onMoveNodes, onBeforeChange, isRunning = false, onAddNode }: Props) {
+  const [selectedIds, setSelectedIds] = useState<string[]>(workflow.nodes[0]?.id ? [workflow.nodes[0].id] : []);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [connectionEnd, setConnectionEnd] = useState<Position | null>(null);
   const gesture = useRef<Gesture | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
+  const selectedId = selectedIds[0] || '';
   const selected = workflow.nodes.find((node) => node.id === selectedId) || workflow.nodes[0];
   const selectedProvider = providers.find((provider) => provider.id === selected?.config?.providerId);
   const selectedModel = (modelsByProvider[selected?.config?.providerId] || []).find((model) => model.id === selected?.config?.modelId);
@@ -64,8 +69,17 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
   const selectedIncomingSource = workflow.nodes.find((node) => node.id === selectedIncoming?.source);
 
   useEffect(() => {
-    if (!workflow.nodes.some((node) => node.id === selectedId)) setSelectedId(workflow.nodes[0]?.id || '');
-  }, [workflow.nodes, selectedId]);
+    const available = selectedIds.filter((id) => workflow.nodes.some((node) => node.id === id));
+    if (!available.length && workflow.nodes[0]) setSelectedIds([workflow.nodes[0].id]);
+    else if (available.length !== selectedIds.length) setSelectedIds(available);
+  }, [workflow.nodes, selectedIds]);
+
+  const selectNode = (id: string, additive = false) => {
+    setSelectedIds((current) => {
+      if (!additive) return [id];
+      return current.includes(id) ? (current.length > 1 ? current.filter((item) => item !== id) : current) : [...current, id];
+    });
+  };
 
   const bounds = useMemo(() => {
     const maxX = Math.max(0, ...workflow.nodes.map((node) => getPosition(node).x + NODE_WIDTH));
@@ -90,12 +104,24 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
   };
   const startNodeMove = (event: ReactPointerEvent<HTMLElement>, node: FlowNode) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
-    event.preventDefault(); event.stopPropagation(); setSelectedId(node.id);
-    gesture.current = { type: 'node', id: node.id, startX: event.clientX, startY: event.clientY, origin: getPosition(node) };
+    event.preventDefault(); event.stopPropagation();
+    const additive = event.metaKey || event.ctrlKey || event.shiftKey;
+    const ids = additive
+      ? (selectedIds.includes(node.id) ? selectedIds : [...selectedIds, node.id])
+      : (selectedIds.includes(node.id) ? selectedIds : [node.id]);
+    setSelectedIds(ids);
+    onBeforeChange?.();
+    gesture.current = {
+      type: 'node',
+      ids,
+      startX: event.clientX,
+      startY: event.clientY,
+      origins: Object.fromEntries(ids.map((id) => [id, getPosition(workflow.nodes.find((item) => item.id === id) || node)])),
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const startConnection = (event: ReactPointerEvent<HTMLButtonElement>, nodeId: string, sourceHandle?: string) => {
-    event.preventDefault(); event.stopPropagation(); setSelectedId(nodeId);
+    event.preventDefault(); event.stopPropagation(); selectNode(nodeId);
     gesture.current = { type: 'connect', sourceId: nodeId, sourceHandle };
     setConnectionEnd(canvasPoint(event.clientX, event.clientY));
     viewportRef.current?.setPointerCapture(event.pointerId);
@@ -104,10 +130,14 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
     const current = gesture.current;
     if (!current) return;
     if (current.type === 'node') {
-      onMoveNode(current.id, {
-        x: Math.max(24, Math.round(current.origin.x + (event.clientX - current.startX) / zoom)),
-        y: Math.max(24, Math.round(current.origin.y + (event.clientY - current.startY) / zoom)),
-      });
+      const deltaX = (event.clientX - current.startX) / zoom;
+      const deltaY = (event.clientY - current.startY) / zoom;
+      const positions = Object.fromEntries(current.ids.map((id) => {
+        const origin = current.origins[id];
+        return [id, { x: Math.max(24, Math.round(origin.x + deltaX)), y: Math.max(24, Math.round(origin.y + deltaY)) }];
+      }));
+      if (current.ids.length > 1 && onMoveNodes) onMoveNodes(positions);
+      else if (current.ids[0]) onMoveNode(current.ids[0], positions[current.ids[0]]);
     } else if (current.type === 'pan') {
       const viewport = viewportRef.current;
       if (viewport) {
@@ -151,8 +181,11 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
 
   return <>
     <div className="flow-canvas-tools">
-      <div className="flow-canvas-hint"><Grip size={14} /><span>Arrastra nodos o el fondo · conecta los puertos · usa el zoom para navegar</span></div>
+      <div className="flow-canvas-hint"><Grip size={14} /><span>Arrastra el lienzo para navegar · ⌘/Ctrl + clic selecciona varios · arrastra los puertos para conectar</span></div>
       <div className="flow-zoom-controls" aria-label="Controles del lienzo">
+        {selectedIds.length > 1 && <span className="flow-selection-count">{selectedIds.length} seleccionados</span>}
+        {selectedIds.length > 0 && onDuplicateNodes && <button className="icon-button" title="Duplicar nodos seleccionados" aria-label="Duplicar nodos seleccionados" onClick={() => onDuplicateNodes(selectedIds)}><Copy size={14} /></button>}
+        {selectedIds.length > 0 && <button className="icon-button danger-icon" title="Eliminar nodo seleccionado" aria-label="Eliminar nodo seleccionado" onClick={() => onDeleteNode(selectedId)}><Trash2 size={14} /></button>}
         <button className="icon-button" title="Alejar" aria-label="Alejar lienzo" onClick={() => zoomBy(-0.1)} disabled={zoom <= 0.5}><ZoomOut size={14} /></button>
         <span>{Math.round(zoom * 100)}%</span>
         <button className="icon-button" title="Acercar" aria-label="Acercar lienzo" onClick={() => zoomBy(0.1)} disabled={zoom >= 1.5}><ZoomIn size={14} /></button>
@@ -173,7 +206,7 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
               const end = inputPoint(target);
               const curve = Math.max(50, Math.abs(end.x - start.x) * 0.45);
               return <g key={`${edge.source}-${edge.sourceHandle || 'main'}-${edge.target}-${index}`}>
-                <path className={`flow-edge-path ${source.type === 'condition' ? `edge-${edge.sourceHandle || 'true'}` : ''}`} d={`M ${start.x} ${start.y} C ${start.x + curve} ${start.y}, ${end.x - curve} ${end.y}, ${end.x} ${end.y}`} />
+                <path className={`flow-edge-path ${isRunning ? 'flow-edge-active' : ''} ${source.type === 'condition' ? `edge-${edge.sourceHandle || 'true'}` : ''}`} d={`M ${start.x} ${start.y} C ${start.x + curve} ${start.y}, ${end.x - curve} ${end.y}, ${end.x} ${end.y}`} />
                 {source.type === 'condition' && <text className={`flow-edge-label edge-label-${edge.sourceHandle || 'true'}`} x={start.x + 12} y={start.y - 7}>{edge.sourceHandle === 'false' ? 'FALSA' : 'VERDADERA'}</text>}
               </g>;
             })}
@@ -193,7 +226,7 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
             const model = (modelsByProvider[node.config?.providerId] || []).find((item) => item.id === node.config?.modelId);
             return <div key={node.id} className="flow-node-position" style={{ left: position.x, top: position.y, width: NODE_WIDTH, minHeight: node.type === 'condition' ? CONDITION_HEIGHT : NODE_HEIGHT }}>
               {hasInput && <button className="flow-port flow-port-input" data-flow-node-target={node.id} title="Puerto de entrada: suelta aquí una conexión" aria-label={`Entrada de ${node.name || labelByType[node.type]}`} />}
-              <article className={`workflow-node-card node-${node.type} ${selected?.id === node.id ? 'workflow-node-selected' : ''}`} onPointerDown={(event) => startNodeMove(event, node)} onClick={() => setSelectedId(node.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedId(node.id); }} tabIndex={0} role="button" aria-pressed={selected?.id === node.id} aria-label={`Seleccionar nodo ${node.name || labelByType[node.type]}`}>
+              <article className={`workflow-node-card node-${node.type} ${selectedIds.includes(node.id) ? 'workflow-node-selected' : ''} ${selectedIds.length > 1 && selectedIds.includes(node.id) ? 'workflow-node-multi-selected' : ''} ${isRunning ? 'workflow-node-executing' : ''}`} onPointerDown={(event) => startNodeMove(event, node)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNode(node.id, event.metaKey || event.ctrlKey || event.shiftKey); } if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); onDeleteNode(node.id); } if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); onDuplicateNodes?.([node.id]); } }} tabIndex={0} role="button" aria-pressed={selectedIds.includes(node.id)} aria-label={`Seleccionar nodo ${node.name || labelByType[node.type]}`}>
                 <div className="workflow-node-head"><span className="flow-node-icon"><Icon size={15} /></span><div className="workflow-node-label"><b>{node.name || labelByType[node.type] || node.type}</b><small>{labelByType[node.type] || node.type} · {model ? model.status === 'unavailable' ? 'Modelo no disponible' : model.displayName : node.type === 'ai' ? 'Modelo sin configurar' : 'Seleccionar para configurar'}</small></div><span className="flow-node-number">{String(index + 1).padStart(2, '0')}</span></div>
                 {node.type === 'condition' && <div className="workflow-node-branches"><span>Salida verdadera</span><span>Salida falsa</span></div>}
                 {hasOutput && node.type !== 'condition' && <span className="workflow-node-port-caption">Salida</span>}
@@ -204,6 +237,16 @@ export function WorkflowCanvas({ workflow, providers, modelsByProvider, agents, 
                 <button className="flow-port flow-port-output flow-port-output-false" title="Arrastra la rama falsa a un nodo" aria-label="Puerto de salida falsa" onPointerDown={(event) => startConnection(event, node.id, 'false')} />
               </>}
             </div>;
+          })}
+        </div>
+      </div>
+      <div className="flow-minimap" aria-label="Minimapa del flujo">
+        <div className="flow-minimap-label"><span>MAPA</span><i className={isRunning ? 'is-live' : ''} /></div>
+        <div className="flow-minimap-world">
+          {workflow.edges.map((edge, index) => <span className="flow-minimap-edge" key={`${edge.source}-${edge.target}-${index}`} />)}
+          {workflow.nodes.map((node) => {
+            const position = getPosition(node);
+            return <span key={node.id} className={`flow-minimap-node ${selectedIds.includes(node.id) ? 'is-selected' : ''} node-${node.type}`} style={{ left: `${(position.x / bounds.width) * 100}%`, top: `${(position.y / bounds.height) * 100}%`, width: `${(NODE_WIDTH / bounds.width) * 100}%`, height: `${((node.type === 'condition' ? CONDITION_HEIGHT : NODE_HEIGHT) / bounds.height) * 100}%` }} />;
           })}
         </div>
       </div>

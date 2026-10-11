@@ -23,7 +23,7 @@ export function Sidebar({ view, onNavigate, chats, activeChatId, onSelectChat, o
     {mobileOpen && <button className="sidebar-scrim" aria-label="Cerrar navegación" onClick={onCloseMobile} />}
     <aside className={`sidebar ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
       <div className="sidebar-top">
-        <div className="sidebar-brand"><BrandMark /><div><b>NEXUS</b><small>AI WORKSPACE</small></div><button className="icon-button sidebar-close" onClick={onCloseMobile} aria-label="Cerrar menú"><X size={17} /></button></div>
+        <div className="sidebar-brand"><BrandMark /><div><b>N2N</b><small>AI AUTOMATION</small></div><button className="icon-button sidebar-close" onClick={onCloseMobile} aria-label="Cerrar menú"><X size={17} /></button></div>
         <div className="workspace-switcher-wrap">
           <button className="workspace-switcher" onClick={() => setProjectMenuOpen(!projectMenuOpen)}>
             <span className="workspace-switcher-icon"><FolderKanban size={15} /></span><span className="workspace-switcher-copy"><small>PROYECTO ACTIVO</small><b>{selectedProject?.name || 'Sin proyecto'}</b></span><ChevronDown size={14} className={projectMenuOpen ? 'rotate-180' : ''} />

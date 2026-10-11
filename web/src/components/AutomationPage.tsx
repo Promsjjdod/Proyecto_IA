@@ -1,20 +1,43 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Bot, Check, CirclePlay, Clock3, Copy, GitBranch, Globe2, Layers3, ListChecks, LoaderCircle, Pause, Play, Plus, Save, Settings2, Sparkles, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
-import type { Agent, FlowEdge, FlowNode, Model, Project, Provider, Workflow } from '../types';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Activity, ArrowLeft, ArrowRight, Bot, Check, CirclePlay, Clock3, Copy, Download, FileDown, FileUp, GitBranch, Globe2, Layers3, ListChecks, LoaderCircle, Pause, Play, Plus, Redo2, Save, Settings2, Sparkles, Trash2, Undo2, Workflow as WorkflowIcon } from 'lucide-react';
+import type { Agent, FlowEdge, FlowNode, Model, Project, Provider, Workflow, WorkflowVersion } from '../types';
 import { api } from '../api';
 import { EmptyState, ErrorBanner, Modal } from './common';
 import { WorkflowCanvas } from './WorkflowCanvas';
+import { WorkflowAgentDock } from './WorkflowAgentDock';
 
-const catalog: { type: string; label: string; description: string; Icon: typeof WorkflowIcon }[] = [
-  { type: 'text', label: 'Texto', description: 'Añade o transforma texto', Icon: Layers3 },
-  { type: 'ai', label: 'Nodo de IA', description: 'Ejecuta un modelo conectado', Icon: Sparkles },
-  { type: 'agent', label: 'Habilidades', description: 'Carga instrucciones de una habilidad', Icon: Bot },
-  { type: 'read_file', label: 'Leer archivo', description: 'Lee archivos del proyecto activo', Icon: ListChecks },
-  { type: 'write_file', label: 'Escribir archivo', description: 'Guarda un archivo en el proyecto', Icon: Save },
-  { type: 'transform', label: 'Transformar', description: 'Mayúsculas, minúsculas, prefijo…', Icon: Settings2 },
-  { type: 'condition', label: 'Condición', description: 'Abre ramas verdadera y falsa', Icon: GitBranch },
-  { type: 'http', label: 'Petición HTTP', description: 'HTTPS público permitido por allowlist', Icon: Globe2 },
-  { type: 'output', label: 'Salida', description: 'Devuelve el resultado del flujo', Icon: ArrowRight },
+type CatalogItem = {
+  type: string;
+  label: string;
+  description: string;
+  category: string;
+  Icon: typeof WorkflowIcon;
+  status?: 'ready' | 'experimental';
+  preset?: Record<string, unknown>;
+};
+
+/**
+ * The catalog is intentionally honest: ready modules map to an engine operation;
+ * experimental cards are visible for product direction but cannot be added yet.
+ */
+const catalog: CatalogItem[] = [
+  { type: 'ai', label: 'Chat con modelos', description: 'Envía contexto a un proveedor configurado', category: 'Inteligencia artificial', Icon: Sparkles, preset: { prompt: '{{result}}', mode: 'MEDIO' } },
+  { type: 'ai', label: 'Resumen de documentos', description: 'Resume el contenido recibido con instrucciones reales', category: 'Inteligencia artificial', Icon: FileDown, preset: { prompt: 'Resume con precisión el siguiente contenido y conserva los datos clave:\n\n{{result}}', mode: 'MEDIO' } },
+  { type: 'ai', label: 'Clasificación de contenido', description: 'Clasifica texto usando el modelo elegido', category: 'Inteligencia artificial', Icon: GitBranch, preset: { prompt: 'Clasifica el siguiente contenido y devuelve una etiqueta y una breve justificación:\n\n{{result}}', mode: 'LOW' } },
+  { type: 'ai', label: 'Extracción estructurada', description: 'Extrae información siguiendo un esquema indicado', category: 'Inteligencia artificial', Icon: Layers3, preset: { prompt: 'Extrae la información importante en JSON válido desde:\n\n{{result}}', mode: 'ALTO' } },
+  { type: 'ai', label: 'Generación de código', description: 'Produce código a partir de una instrucción', category: 'Inteligencia artificial', Icon: WorkflowIcon, preset: { prompt: 'Genera una solución de código segura y explica sus supuestos:\n\n{{result}}', mode: 'ALTO' } },
+  { type: 'agent', label: 'Agente especializado', description: 'Aplica instrucciones y herramientas autorizadas', category: 'Inteligencia artificial', Icon: Bot },
+  { type: 'condition', label: 'Condiciones y ramas', description: 'Evalúa la salida y abre rutas verdadera/falsa', category: 'Automatización', Icon: GitBranch },
+  { type: 'transform', label: 'Transformación de datos', description: 'Normaliza, cambia mayúsculas o añade texto', category: 'Automatización', Icon: Settings2, preset: { operation: 'trim' } },
+  { type: 'text', label: 'Plantilla de texto', description: 'Crea texto con {{input}} y {{result}}', category: 'Entrada y salida', Icon: Layers3 },
+  { type: 'read_file', label: 'Lectura autorizada de archivos', description: 'Lee un archivo del proyecto seleccionado', category: 'Entrada y salida', Icon: ListChecks },
+  { type: 'write_file', label: 'Escritura validada de archivos', description: 'Prepara y valida un archivo antes de guardarlo', category: 'Entrada y salida', Icon: Save },
+  { type: 'http', label: 'Solicitud HTTPS', description: 'Llama a un host HTTPS permitido por el servidor', category: 'Integraciones', Icon: Globe2 },
+  { type: 'output', label: 'Salida del flujo', description: 'Entrega el resultado al registro de ejecución', category: 'Entrada y salida', Icon: ArrowRight },
+  { type: 'start', label: 'Inicio manual', description: 'Disponible en todos los flujos nuevos', category: 'Control y observabilidad', Icon: CirclePlay, status: 'experimental' },
+  { type: 'pending', label: 'Disparador por horario', description: 'Pendiente: requiere un scheduler de servidor', category: 'Automatización', Icon: Clock3, status: 'experimental' },
+  { type: 'pending', label: 'Búsqueda web con proveedor', description: 'Pendiente: necesita un conector configurado', category: 'Herramientas de agentes', Icon: Globe2, status: 'experimental' },
+  { type: 'pending', label: 'Métricas avanzadas', description: 'Pendiente: prevista para el panel de observabilidad', category: 'Control y observabilidad', Icon: Activity, status: 'experimental' },
 ];
 function newId() { return crypto.randomUUID().replace(/-/g, '').slice(0, 12); }
 
@@ -82,6 +105,34 @@ function wouldCreateCycle(edges: FlowEdge[], source: string, target: string) {
 
 function enabled(workflow: Workflow) { return workflow.enabled !== false; }
 
+const importableNodeTypes = new Set(['start', 'input', 'text', 'ai', 'agent', 'read_file', 'write_file', 'http', 'condition', 'transform', 'output', 'end']);
+const secretKeyPattern = /(?:api[_-]?key|secret|password|passwd|token|authorization|credential|private[_-]?key)/i;
+function withoutSecrets(value: unknown, key = ''): unknown {
+  if (secretKeyPattern.test(key)) return undefined;
+  if (Array.isArray(value)) return value.map((item) => withoutSecrets(item));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).flatMap(([childKey, childValue]) => {
+    const clean = withoutSecrets(childValue, childKey);
+    return clean === undefined ? [] : [[childKey, clean]];
+  }));
+  return value;
+}
+function exportableWorkflow(workflow: Workflow): Workflow {
+  return withoutSecrets({ ...workflow, enabled: undefined, createdAt: undefined, updatedAt: undefined }) as Workflow;
+}
+function validateImportedWorkflow(value: unknown): value is Workflow {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<Workflow>;
+  if (typeof candidate.name !== 'string' || candidate.name.trim().length < 1 || candidate.name.length > 100 || !Array.isArray(candidate.nodes) || candidate.nodes.length < 1 || candidate.nodes.length > 40 || !Array.isArray(candidate.edges) || candidate.edges.length > 80) return false;
+  const ids = new Set<string>();
+  for (const node of candidate.nodes) {
+    if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(node.id) || ids.has(node.id) || !importableNodeTypes.has(node.type)) return false;
+    ids.add(node.id);
+  }
+  return candidate.edges.every((edge) => edge && typeof edge.source === 'string' && typeof edge.target === 'string' && ids.has(edge.source) && ids.has(edge.target) && edge.source !== edge.target && (edge.sourceHandle === undefined || edge.sourceHandle === 'true' || edge.sourceHandle === 'false'));
+}
+
+type WorkflowProposal = { workflow: Workflow; generatedBy: { providerName: string; modelName: string } };
+
 export function AutomationPage({ workflows, providers, modelsByProvider, agents, projects, activeProjectId, onRefresh, onRefreshUsage, onGoProviders, loading = false }: {
   workflows: Workflow[]; providers: Provider[]; modelsByProvider: Record<string, Model[]>; agents: Agent[]; projects: Project[]; activeProjectId: string | null;
   onRefresh: () => void; onRefreshUsage: () => void; onGoProviders: () => void; loading?: boolean;
@@ -105,10 +156,20 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
   const [input, setInput] = useState('');
   const [run, setRun] = useState<any>(null);
   const [runHistory, setRunHistory] = useState<any[]>([]);
+  const [versions, setVersions] = useState<WorkflowVersion[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
   const [showNodePicker, setShowNodePicker] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<string | null>(null);
   const [removingFlowId, setRemovingFlowId] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<WorkflowProposal | null>(null);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogCategory, setCatalogCategory] = useState('Todos');
+  const importRef = useRef<HTMLInputElement>(null);
+  const draftRef = useRef<Workflow | null>(null);
+  const pastRef = useRef<Workflow[]>([]);
+  const futureRef = useRef<Workflow[]>([]);
 
+  useEffect(() => { draftRef.current = draft; }, [draft]);
   const busy = busyAction !== null;
   const defaultGenerator = generatorOptions?.secondProvider || null;
   const providerForOptions = useMemo(() => selectedGeneratorProviderId
@@ -147,11 +208,38 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
     try {
       setBusyAction('create'); setError('');
       const created = await api<Workflow>('/workflows', { method: 'POST', body: JSON.stringify({ name: 'Nueva automatización', description: '', ...starter }) });
-      onRefresh(); setActiveId(created.id); setIsUnsavedDraft(false); setDraft(withWorkflowPositions(created));
+      onRefresh(); setActiveId(created.id); setIsUnsavedDraft(false); pastRef.current = []; futureRef.current = []; setDraft(withWorkflowPositions(created));
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo crear el flujo.'); }
     finally { setBusyAction(null); }
   };
-  const updateDraft = (updater: (value: Workflow) => Workflow) => setDraft((current) => current ? updater(current) : current);
+  const recordBeforeChange = () => {
+    const current = draftRef.current;
+    if (!current) return;
+    pastRef.current = [...pastRef.current.slice(-49), current];
+    futureRef.current = [];
+  };
+  const updateDraft = (updater: (value: Workflow) => Workflow, recordHistory = true) => setDraft((current) => {
+    if (!current) return current;
+    if (recordHistory) {
+      pastRef.current = [...pastRef.current.slice(-49), current];
+      futureRef.current = [];
+    }
+    return updater(current);
+  });
+  const undo = () => {
+    const current = draftRef.current;
+    const previous = pastRef.current.pop();
+    if (!current || !previous) return;
+    futureRef.current = [...futureRef.current.slice(-49), current];
+    setDraft(previous);
+  };
+  const redo = () => {
+    const current = draftRef.current;
+    const next = futureRef.current.pop();
+    if (!current || !next) return;
+    pastRef.current = [...pastRef.current.slice(-49), current];
+    setDraft(next);
+  };
   const save = async () => {
     if (!draft) return;
     setBusyAction('save'); setError('');
@@ -160,19 +248,21 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
       const saved = isUnsavedDraft
         ? await api<Workflow>('/workflows', { method: 'POST', body: JSON.stringify(payload) })
         : await api<Workflow>(`/workflows/${encodeURIComponent(draft.id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
-      setDraft(withWorkflowPositions(saved)); setActiveId(saved.id); setIsUnsavedDraft(false); onRefresh();
+      setDraft(withWorkflowPositions(saved)); setActiveId(saved.id); setIsUnsavedDraft(false); pastRef.current = []; futureRef.current = []; onRefresh();
+      void api<WorkflowVersion[]>(`/workflows/${encodeURIComponent(saved.id)}/versions`).then(setVersions).catch(() => undefined);
       setNotice(isUnsavedDraft ? 'La automatización se guardó en tu cuenta.' : 'Cambios guardados en el servidor.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar el flujo.'); }
     finally { setBusyAction(null); }
   };
   const closeEditor = () => {
     if (isUnsavedDraft && !window.confirm('Este borrador todavía no está guardado. ¿Querés descartarlo?')) return;
-    setActiveId(null); setDraft(null); setIsUnsavedDraft(false); setRun(null); setError(''); setNotice('');
+    setActiveId(null); setDraft(null); setIsUnsavedDraft(false); pastRef.current = []; futureRef.current = []; setRun(null); setError(''); setNotice('');
   };
-  const addNode = (type: string) => {
+  const addNode = (itemOrType: CatalogItem | string) => {
     if (!draft) return;
-    const meta = catalog.find((node) => node.type === type);
-    if (!meta) return;
+    const meta = typeof itemOrType === 'string' ? catalog.find((node) => node.type === itemOrType && node.status !== 'experimental') : itemOrType;
+    if (!meta || meta.status === 'experimental' || meta.type === 'pending') return;
+    const type = meta.type;
     const nodes: FlowNode[] = draft.nodes.map((node) => ({ ...node, position: node.position || { x: 90, y: 90 } }));
     const outputIndex = nodes.findIndex((item) => item.type === 'output' || item.type === 'end');
     const insertAt = outputIndex < 0 ? nodes.length : outputIndex;
@@ -183,16 +273,14 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
       const oldNextX = nextNode.position.x;
       for (const node of nodes) if (node.position && node.position.x >= oldNextX) node.position = { ...node.position, x: node.position.x + 320 };
     }
-    const node: FlowNode = {
-      id: newId(), type, name: meta.label, position: { x: newX, y: previousPosition.y },
-      config: type === 'ai' ? { mode: 'MEDIO', providerId: '', modelId: '', prompt: '{{result}}' }
-        : type === 'transform' ? { operation: 'trim' }
-          : type === 'condition' ? { contains: '' }
-            : type === 'write_file' ? { path: 'output.txt', content: '{{result}}' }
-              : type === 'read_file' ? { path: 'README.md' }
-                : type === 'http' ? { method: 'GET', url: '' }
-                  : type === 'text' ? { text: '' } : {},
-    };
+    const defaults: Record<string, unknown> = type === 'ai' ? { mode: 'MEDIO', providerId: '', modelId: '', prompt: '{{result}}' }
+      : type === 'transform' ? { operation: 'trim' }
+        : type === 'condition' ? { contains: '' }
+          : type === 'write_file' ? { path: 'output.txt', content: '{{result}}' }
+            : type === 'read_file' ? { path: 'README.md' }
+              : type === 'http' ? { method: 'GET', url: '' }
+                : type === 'text' ? { text: '' } : {};
+    const node: FlowNode = { id: newId(), type, name: meta.label, position: { x: newX, y: previousPosition.y }, config: { ...defaults, ...(meta.preset || {}) } };
     nodes.splice(insertAt, 0, node);
     let edges = [...draft.edges];
     const directEdgeIndex = previousNode && nextNode ? edges.findIndex((edge) => edge.source === previousNode.id && edge.target === nextNode.id) : -1;
@@ -201,28 +289,46 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
       edges = edges.filter((_edge, index) => index !== directEdgeIndex);
       edges.push({ ...previousEdge, target: node.id }, { source: node.id, target: nextNode!.id });
     } else if (previousNode) edges.push({ source: previousNode.id, target: node.id });
-    setDraft({ ...draft, nodes, edges }); setShowNodePicker(false);
+    updateDraft((current) => ({ ...current, nodes, edges })); setShowNodePicker(false);
+  };
+  const requestDeleteNode = (id: string) => {
+    const node = draft?.nodes.find((item) => item.id === id);
+    if (node && ['start', 'input', 'output', 'end'].includes(node.type)) { setError('Los nodos estructurales del flujo no se pueden eliminar. Puedes quitar sus conexiones.'); return; }
+    setNodeToDelete(id);
   };
   const removeNode = (id: string) => {
     if (!draft) return;
-    setDraft({ ...draft, nodes: draft.nodes.filter((node) => node.id !== id), edges: draft.edges.filter((edge) => edge.source !== id && edge.target !== id) });
+    if (['start', 'input', 'output', 'end'].includes(draft.nodes.find((node) => node.id === id)?.type || '')) { setNodeToDelete(null); return; }
+    updateDraft((current) => ({ ...current, nodes: current.nodes.filter((node) => node.id !== id), edges: current.edges.filter((edge) => edge.source !== id && edge.target !== id) }));
     setNodeToDelete(null);
   };
-  const moveNode = (id: string, position: { x: number; y: number }) => updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((node) => node.id === id ? { ...node, position } : node) }));
+  const moveNode = (id: string, position: { x: number; y: number }) => updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((node) => node.id === id ? { ...node, position } : node) }), false);
+  const moveNodes = (positions: Record<string, { x: number; y: number }>) => updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((node) => positions[node.id] ? { ...node, position: positions[node.id] } : node) }), false);
   const patchNode = (id: string, patch: Partial<FlowNode> & { config?: Record<string, unknown> }) => updateDraft((flow) => ({ ...flow, nodes: flow.nodes.map((node) => node.id === id ? { ...node, ...patch, config: patch.config ? { ...node.config, ...patch.config } : node.config } : node) }));
+  const duplicateNodes = (ids: string[]) => {
+    if (!draft || !ids.length) return;
+    const selectedNodes = draft.nodes.filter((node) => ids.includes(node.id) && !['start', 'input', 'output', 'end'].includes(node.type));
+    const idMap = new Map(selectedNodes.map((node) => [node.id, newId()]));
+    const copies = selectedNodes.map((node) => ({ ...node, id: idMap.get(node.id)!, name: `${node.name || 'Nodo'} · copia`, position: { x: (node.position?.x || 90) + 52, y: (node.position?.y || 90) + 52 }, config: { ...node.config } }));
+    const copiedEdges = draft.edges.filter((edge) => idMap.has(edge.source) && idMap.has(edge.target)).map((edge) => ({ ...edge, source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
+    updateDraft((current) => ({ ...current, nodes: [...current.nodes, ...copies], edges: [...current.edges, ...copiedEdges] }));
+  };
   const connectNode = (targetId: string, sourceId: string, sourceHandle?: string) => {
     if (!draft) return;
-    const edges = draft.edges.filter((edge) => edge.target !== targetId);
-    if (wouldCreateCycle(edges, sourceId, targetId)) { setError('Esa conexión crearía un ciclo. Elige otro nodo de origen.'); return; }
     const source = draft.nodes.find((node) => node.id === sourceId);
-    if (!source || sourceId === targetId) { setError('La conexión no es válida.'); return; }
-    edges.push({ source: sourceId, target: targetId, ...(source.type === 'condition' ? { sourceHandle: sourceHandle === 'false' ? 'false' : 'true' } : {}) });
-    setDraft({ ...draft, edges }); setError('');
+    const target = draft.nodes.find((node) => node.id === targetId);
+    if (!source || !target || sourceId === targetId) { setError('La conexión no es válida: selecciona un puerto de salida y otro de entrada.'); return; }
+    if (source.type === 'output' || source.type === 'end') { setError('Una salida o finalización no puede iniciar otra conexión.'); return; }
+    if (target.type === 'start') { setError('El inicio manual no admite entradas.'); return; }
+    if (source.type === 'condition' && !sourceHandle) { setError('Elige la rama verdadera o falsa de la condición.'); return; }
+    if (source.type !== 'condition' && sourceHandle) { setError('Solo las condiciones tienen puertos de rama.'); return; }
+    const edgeSourceHandle = source.type === 'condition' ? (sourceHandle === 'false' ? 'false' : 'true') : undefined;
+    const edges = draft.edges.filter((edge) => edge.target !== targetId && !(edge.source === sourceId && edge.sourceHandle === edgeSourceHandle));
+    if (wouldCreateCycle(edges, sourceId, targetId)) { setError('Esa conexión crearía un ciclo. Elige otro nodo de origen.'); return; }
+    if (edges.some((edge) => edge.source === sourceId && edge.target === targetId && edge.sourceHandle === edgeSourceHandle)) { setError('Ese enlace ya existe.'); return; }
+    updateDraft((current) => ({ ...current, edges: [...edges, { source: sourceId, target: targetId, ...(edgeSourceHandle ? { sourceHandle: edgeSourceHandle } : {}) }] })); setError('');
   };
-  const disconnectNode = (targetId: string) => {
-    if (!draft) return;
-    setDraft({ ...draft, edges: draft.edges.filter((edge) => edge.target !== targetId) });
-  };
+  const disconnectNode = (targetId: string) => updateDraft((current) => ({ ...current, edges: current.edges.filter((edge) => edge.target !== targetId) }));
   const deleteFlow = async (flow: Workflow) => {
     if (!window.confirm(`¿Eliminar el flujo «${flow.name}» y sus registros?`)) return;
     try {
@@ -238,7 +344,7 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
     try {
       setBusyAction('duplicate');
       const copy = await api<Workflow>(`/workflows/${encodeURIComponent(flow.id)}/duplicate`, { method: 'POST', body: '{}' });
-      onRefresh(); setActiveId(copy.id); setIsUnsavedDraft(false); setDraft(withWorkflowPositions(copy));
+      onRefresh(); setActiveId(copy.id); setIsUnsavedDraft(false); pastRef.current = []; futureRef.current = []; setDraft(withWorkflowPositions(copy));
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo duplicar el flujo.'); }
     finally { setBusyAction(null); }
   };
@@ -265,9 +371,11 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
     } catch (e) { setError(e instanceof Error ? e.message : 'Falló la ejecución del flujo.'); }
     finally { onRefreshUsage(); setBusyAction(null); }
   };
-  const generate = async (event: FormEvent) => {
-    event.preventDefault();
-    if (isGenerating || !generationRequest.trim()) return;
+  const generate = async (eventOrRequest: FormEvent | string) => {
+    if (typeof eventOrRequest !== 'string') eventOrRequest.preventDefault();
+    const request = (typeof eventOrRequest === 'string' ? eventOrRequest : generationRequest).trim();
+    if (isGenerating || !request) return;
+    setGenerationRequest(request);
     if (!providerForOptions?.ready || !modelValue) {
       setGenerationError(generatorOptions?.secondProviderReason || 'Configurá un proveedor y un modelo disponible antes de generar.');
       return;
@@ -277,31 +385,85 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
     setIsGenerating(true); setGenerationError(''); setGenerationNotice(''); setError('');
     try {
       const result = await api<{ name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[]; generatedBy: { providerId: string; providerName: string; modelId: string; modelName: string } }>('/workflows/generate', {
-        method: 'POST', body: JSON.stringify({ request: generationRequest.trim(), requestId: crypto.randomUUID(), ...(providerOverride ? { providerId: providerOverride } : {}), ...(modelOverride ? { modelId: modelOverride } : {}) }),
+        method: 'POST', body: JSON.stringify({ request, requestId: crypto.randomUUID(), ...(providerOverride ? { providerId: providerOverride } : {}), ...(modelOverride ? { modelId: modelOverride } : {}) }),
       });
       const now = new Date().toISOString();
       const generatedDraft: Workflow = { id: `draft-${newId()}`, name: result.name, description: result.description, nodes: result.nodes, edges: result.edges, enabled: true, createdAt: now, updatedAt: now };
-      setActiveId(null); setDraft(withWorkflowPositions(generatedDraft)); setIsUnsavedDraft(true);
-      setGenerationNotice(`Borrador generado por ${result.generatedBy.providerName} · ${result.generatedBy.modelName}. Revisalo y guardalo cuando esté listo.`);
+      setProposal({ workflow: withWorkflowPositions(generatedDraft), generatedBy: { providerName: result.generatedBy.providerName, modelName: result.generatedBy.modelName } });
+      setGenerationNotice(`La propuesta está lista. Revisala antes de aplicarla al lienzo.`);
       onRefreshUsage();
     } catch (e) { setGenerationError(e instanceof Error ? e.message : 'No se pudo generar la automatización. No se guardó ningún flujo.'); onRefreshUsage(); }
     finally { setIsGenerating(false); }
+  };
+  const acceptProposal = () => {
+    if (!proposal) return;
+    pastRef.current = []; futureRef.current = [];
+    setActiveId(null); setDraft(proposal.workflow); setIsUnsavedDraft(true); setProposal(null); setRun(null);
+    setNotice('Propuesta aplicada como borrador. Puedes modificar nodos y conexiones antes de guardarla.');
+  };
+  const exportFlow = (flow: Workflow) => {
+    const safe = exportableWorkflow(flow);
+    const blob = new Blob([JSON.stringify(safe, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${(flow.name || 'automatizacion').toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, '-').replace(/^-|-$/g, '') || 'automatizacion'}.json`;
+    anchor.click(); URL.revokeObjectURL(url);
+  };
+  const importFlow = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!validateImportedWorkflow(parsed)) throw new Error('El archivo no contiene un flujo válido o incluye nodos no compatibles.');
+      const imported: Workflow = withWorkflowPositions({ id: `import-${newId()}`, name: parsed.name, description: parsed.description || '', nodes: parsed.nodes, edges: parsed.edges, enabled: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      pastRef.current = []; futureRef.current = [];
+      setActiveId(null); setDraft(imported); setIsUnsavedDraft(true); setNotice('Flujo importado como borrador. Revisa sus conexiones antes de guardarlo o ejecutarlo.');
+    } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo importar el flujo.'); }
+  };
+  const restoreVersion = async (version: WorkflowVersion) => {
+    if (!activeId || !window.confirm(`¿Restaurar la versión del ${new Date(version.createdAt).toLocaleString()}? Se guardará la versión actual antes de reemplazarla.`)) return;
+    try {
+      const restored = await api<Workflow>(`/workflows/${encodeURIComponent(activeId)}/versions/${encodeURIComponent(version.id)}/restore`, { method: 'POST', body: '{}' });
+      setDraft(withWorkflowPositions(restored)); setIsUnsavedDraft(false); pastRef.current = []; futureRef.current = []; setShowVersions(false); setNotice('Versión restaurada y guardada.'); onRefresh();
+      setVersions(await api<WorkflowVersion[]>(`/workflows/${encodeURIComponent(activeId)}/versions`));
+    } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo restaurar la versión.'); }
   };
   const selectGeneratorProvider = (providerId: string) => {
     setSelectedGeneratorProviderId(providerId);
     const provider = providerId ? generatorOptions?.providers.find((item) => item.id === providerId) : defaultGenerator;
     setSelectedGeneratorModelId(provider?.models[0]?.id || '');
   };
+  const dockProviderId = selectedGeneratorProviderId || defaultGenerator?.id || '';
+  const selectDockProvider = (providerId: string) => {
+    if (providerId === defaultGenerator?.id) selectGeneratorProvider('');
+    else selectGeneratorProvider(providerId);
+  };
   useEffect(() => {
-    if (!activeId) { setRunHistory([]); return; }
+    if (!activeId) { setRunHistory([]); setVersions([]); return; }
     let current = true;
     api<any[]>(`/workflows/${encodeURIComponent(activeId)}/runs`).then((rows) => { if (current) setRunHistory(rows); }).catch(() => { /* Historial opcional mientras se edita. */ });
+    api<WorkflowVersion[]>(`/workflows/${encodeURIComponent(activeId)}/versions`).then((rows) => { if (current) setVersions(rows); }).catch(() => { if (current) setVersions([]); });
     return () => { current = false; };
   }, [activeId]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!draft || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      event.preventDefault();
+      if (event.shiftKey) redo(); else undo();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [draft]);
+
+  const catalogCategories = ['Todos', ...Array.from(new Set(catalog.map((item) => item.category)))];
+  const visibleCatalog = catalog.filter((item) => (catalogCategory === 'Todos' || item.category === catalogCategory) && (!catalogSearch.trim() || `${item.label} ${item.description} ${item.category}`.toLowerCase().includes(catalogSearch.trim().toLowerCase())));
+  const catalogGroups = catalogCategories.filter((category) => category !== 'Todos').map((category) => ({ category, items: visibleCatalog.filter((item) => item.category === category) })).filter((group) => group.items.length);
 
   return <div className="page-content automations-page">
     {!draft ? <>
-      <div className="page-heading-row automation-page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> FLUJOS CONECTADOS</div><h1>Automatizaciones</h1><p>Diseñá flujos reales con pasos verificables y controles de ejecución.</p></div><button className="button button-secondary" onClick={() => void addFlow()} disabled={busy || isGenerating}><Plus size={16} />Crear flujo en blanco</button></div>
+      <div className="page-heading-row automation-page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> N2N · FLUJOS CONECTADOS</div><h1>Automatizaciones</h1><p>Diseña, conecta y ejecuta operaciones reales con inteligencia artificial.</p></div><div className="automation-heading-actions"><input ref={importRef} type="file" accept="application/json,.json" hidden onChange={(event) => void importFlow(event)} /><button className="button button-quiet" onClick={() => importRef.current?.click()} disabled={busy || isGenerating}><FileUp size={15} />Importar JSON</button><button className="button button-secondary" onClick={() => void addFlow()} disabled={busy || isGenerating}><Plus size={16} />Crear flujo</button></div></div>
+      <div className="automation-metric-strip"><div><span className="metric-icon metric-icon-green"><WorkflowIcon size={14} /></span><span><b>{workflows.length}</b><small>Flujos guardados</small></span></div><div><span className="metric-icon metric-icon-violet"><Activity size={14} /></span><span><b>{workflows.reduce((total, flow) => total + flow.nodes.length, 0)}</b><small>Nodos conectados</small></span></div><div><span className="metric-icon metric-icon-blue"><CirclePlay size={14} /></span><span><b>{workflows.filter(enabled).length}</b><small>Listos para ejecutar</small></span></div><div><span className="metric-icon metric-icon-amber"><Sparkles size={14} /></span><span><b>{generatorOptions?.providers.filter((provider) => provider.ready).length || 0}</b><small>Proveedores activos</small></span></div></div>
       {error && <ErrorBanner message={error} onDismiss={() => setError('')} />}{notice && <div className="success-banner automation-feedback-enter"><Check size={15} />{notice}<button className="icon-button" onClick={() => setNotice('')}>×</button></div>}
       <div className="flow-security-note"><span className="mini-shield">⌑</span><div><b>Diseñado para ejecutar bajo permisos</b><p>Sin comandos de sistema ni código arbitrario. Las escrituras y llamadas externas requieren confirmación; HTTP exige una allowlist HTTPS del servidor.</p></div></div>
       <section className="automation-generator-card" aria-labelledby="automation-generator-title" aria-busy={isGenerating}>
@@ -341,11 +503,13 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
         </form>
       </section>
       {loading ? <div className="automation-loading-state"><LoaderCircle size={18} className="spin" />Cargando tus automatizaciones…</div> : workflows.length === 0 ? <div className="automation-empty-wrap"><EmptyState icon={<WorkflowIcon size={25} />} title="Todavía no tenés automatizaciones" description="Generá un borrador con IA o empezá con un flujo en blanco. Tus automatizaciones existentes nunca se borran al mostrar este estado." action={<button className="button button-primary" onClick={() => void addFlow()} disabled={busy || isGenerating}><Plus size={16} />Crear automatización</button>} /></div> : <div className="workflow-list" aria-label="Tus automatizaciones">{workflows.map((workflow, index) => <article key={workflow.id} className={`workflow-list-card ${!enabled(workflow) ? 'workflow-list-card-paused' : ''} ${removingFlowId === workflow.id ? 'workflow-list-card-removing' : ''}`} style={{ animationDelay: `${Math.min(index, 5) * 45}ms` }}>
-        <div className="workflow-list-icon"><WorkflowIcon size={19} /></div><div className="workflow-list-meta"><div className="workflow-list-title-row"><h3>{workflow.name}</h3><span className={`automation-status-pill ${enabled(workflow) ? 'automation-status-active' : 'automation-status-paused'}`}><i />{enabled(workflow) ? 'Activa' : 'En pausa'}</span></div><p>{workflow.description || 'Sin descripción'} · {workflow.nodes.length} nodos</p><small>Actualizada {new Date(workflow.updatedAt).toLocaleDateString()}</small></div><div className="workflow-list-actions"><button className="icon-button" title="Duplicar automatización" aria-label={`Duplicar ${workflow.name}`} onClick={() => void duplicate(workflow)} disabled={busy || isGenerating}><Copy size={15} /></button><button className={`icon-button ${!enabled(workflow) ? 'automation-resume-button' : ''}`} title={enabled(workflow) ? 'Pausar nuevas ejecuciones' : 'Reanudar automatización'} aria-label={enabled(workflow) ? `Pausar ${workflow.name}` : `Reanudar ${workflow.name}`} onClick={() => void toggleWorkflow(workflow)} disabled={busy || isGenerating}>{enabled(workflow) ? <Pause size={15} /> : <Play size={15} />}</button><button className="icon-button danger-icon" title="Eliminar automatización" aria-label={`Eliminar ${workflow.name}`} onClick={() => void deleteFlow(workflow)} disabled={busy || isGenerating}><Trash2 size={15} /></button><button className="button button-secondary button-sm" onClick={() => { setIsUnsavedDraft(false); setActiveId(workflow.id); setNotice(''); setError(''); }} disabled={busy || isGenerating}>Editar <ArrowRight size={14} /></button></div>
+        <div className="workflow-list-icon"><WorkflowIcon size={19} /></div><div className="workflow-list-meta"><div className="workflow-list-title-row"><h3>{workflow.name}</h3><span className={`automation-status-pill ${enabled(workflow) ? 'automation-status-active' : 'automation-status-paused'}`}><i />{enabled(workflow) ? 'Activa' : 'En pausa'}</span></div><p>{workflow.description || 'Sin descripción'} · {workflow.nodes.length} nodos</p><small>Actualizada {new Date(workflow.updatedAt).toLocaleDateString()}</small></div><div className="workflow-list-actions"><button className="icon-button" title="Exportar automatización sin secretos" aria-label={`Exportar ${workflow.name}`} onClick={() => exportFlow(workflow)} disabled={busy || isGenerating}><Download size={15} /></button><button className="icon-button" title="Duplicar automatización" aria-label={`Duplicar ${workflow.name}`} onClick={() => void duplicate(workflow)} disabled={busy || isGenerating}><Copy size={15} /></button><button className={`icon-button ${!enabled(workflow) ? 'automation-resume-button' : ''}`} title={enabled(workflow) ? 'Pausar nuevas ejecuciones' : 'Reanudar automatización'} aria-label={enabled(workflow) ? `Pausar ${workflow.name}` : `Reanudar ${workflow.name}`} onClick={() => void toggleWorkflow(workflow)} disabled={busy || isGenerating}>{enabled(workflow) ? <Pause size={15} /> : <Play size={15} />}</button><button className="icon-button danger-icon" title="Eliminar automatización" aria-label={`Eliminar ${workflow.name}`} onClick={() => void deleteFlow(workflow)} disabled={busy || isGenerating}><Trash2 size={15} /></button><button className="button button-secondary button-sm" onClick={() => { pastRef.current = []; futureRef.current = []; setIsUnsavedDraft(false); setActiveId(workflow.id); setNotice(''); setError(''); }} disabled={busy || isGenerating}>Editar <ArrowRight size={14} /></button></div>
       </article>)}</div>}
       <div className="workflow-roadmap"><span><Clock3 size={14} /> Ejecución manual disponible</span><span>Los disparadores programados todavía no están implementados. Pausar impide nuevas ejecuciones; no interrumpe las ya iniciadas.</span></div>
     </> : <>
-      <div className="flow-editor-topbar automation-editor-enter"><button className="button button-quiet button-sm" onClick={closeEditor}><ArrowLeft size={15} />Automatizaciones</button><div className="flow-title-edit"><WorkflowIcon size={17} /><input aria-label="Nombre del flujo" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /><span>{draft.nodes.length} NODOS</span></div><div className="flow-top-actions">
+      <div className="flow-editor-topbar automation-editor-enter"><button className="button button-quiet button-sm" onClick={closeEditor}><ArrowLeft size={15} />Automatizaciones</button><div className="flow-title-edit"><WorkflowIcon size={17} /><input aria-label="Nombre del flujo" value={draft.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} /><span>{draft.nodes.length} NODOS</span></div><div className="flow-top-actions">
+        <button className="icon-button" title="Deshacer" aria-label="Deshacer" onClick={undo} disabled={!pastRef.current.length || busy || isGenerating}><Undo2 size={14} /></button><button className="icon-button" title="Rehacer" aria-label="Rehacer" onClick={redo} disabled={!futureRef.current.length || busy || isGenerating}><Redo2 size={14} /></button>
+        <button className="button button-quiet button-sm" onClick={() => setShowVersions((value) => !value)} disabled={isUnsavedDraft}><Clock3 size={14} />Historial{versions.length ? ` · ${versions.length}` : ''}</button><button className="button button-quiet button-sm" onClick={() => exportFlow(draft)} disabled={busy || isGenerating}><Download size={14} />Exportar</button>
         {!isUnsavedDraft && <button className="button button-quiet button-sm" onClick={() => void toggleWorkflow(draft)}><span className={`automation-status-dot ${enabled(draft) ? 'is-active' : 'is-paused'}`} />{enabled(draft) ? <><Pause size={14} />Pausar</> : <><Play size={14} />Reanudar</>}</button>}
         {!isUnsavedDraft && <button className="button button-quiet button-sm" onClick={() => void duplicate(draft)} disabled={busy || isGenerating}><Copy size={14} />Duplicar</button>}
         <button className="button button-secondary button-sm" onClick={() => void save()} disabled={busy || isGenerating}><Save size={14} />{isUnsavedDraft ? 'Guardar borrador' : 'Guardar'}</button>
@@ -355,8 +519,9 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
       {isUnsavedDraft && <div className="automation-draft-warning"><Sparkles size={14} /><span>Este es un borrador generado por IA; todavía no se guardó en tu cuenta. Revisalo antes de guardarlo.</span></div>}
       {!enabled(draft) && <div className="automation-paused-banner"><Pause size={14} /><span>Automatización pausada. No se aceptan nuevas ejecuciones; las ya iniciadas no se interrumpen.</span></div>}
       {error && <ErrorBanner message={error} onDismiss={() => setError('')} />}{notice && <div className="success-banner automation-feedback-enter"><Check size={15} />{notice}<button className="icon-button" onClick={() => setNotice('')}>×</button></div>}
-      <div className="flow-editor-layout automation-editor-enter"><main className="flow-canvas"><div className="flow-canvas-header"><div><span className="section-kicker">EDITOR VISUAL</span><h2>{draft.description || 'Diseña tu flujo'}</h2></div><label className="flow-description-edit"><span>DESCRIPCIÓN</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Qué hace esta automatización" /></label></div>
-        <WorkflowCanvas workflow={draft} providers={providers} modelsByProvider={modelsByProvider} agents={agents} onMoveNode={moveNode} onPatchNode={patchNode} onConnect={connectNode} onDisconnect={disconnectNode} onDeleteNode={setNodeToDelete} onAddNode={() => setShowNodePicker(true)} />
+      {showVersions && <section className="workflow-version-panel"><div className="workflow-version-panel-head"><div><span className="section-kicker">CONTROL DE CAMBIOS</span><h3>Versiones guardadas</h3></div><span>{versions.length} snapshots · se conservan en el servidor</span></div>{versions.length ? <div className="workflow-version-list">{versions.map((version, index) => <div className="workflow-version-row" key={version.id}><span className={index === 0 ? 'workflow-version-current' : ''}>{index === 0 ? 'Actual' : `v${versions.length - index}`}</span><div><b>{new Date(version.createdAt).toLocaleString()}</b><small>{version.nodes.length} nodos · {version.edges.length} conexiones</small></div><button className="button button-quiet button-sm" onClick={() => void restoreVersion(version)} disabled={index === 0}>Restaurar</button></div>)}</div> : <p className="workflow-version-empty">Guarda el flujo para comenzar a registrar versiones.</p>}</section>}
+      <div className="flow-editor-layout automation-editor-enter"><main className="flow-canvas"><div className="flow-canvas-header"><div><span className="section-kicker">EDITOR VISUAL</span><h2>{draft.description || 'Diseña tu flujo'}</h2></div><label className="flow-description-edit"><span>DESCRIPCIÓN</span><input value={draft.description} onChange={(event) => updateDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Qué hace esta automatización" /></label></div>
+        <WorkflowCanvas workflow={draft} providers={providers} modelsByProvider={modelsByProvider} agents={agents} onMoveNode={moveNode} onMoveNodes={moveNodes} onBeforeChange={recordBeforeChange} onDuplicateNodes={duplicateNodes} isRunning={busyAction === 'run'} onPatchNode={patchNode} onConnect={connectNode} onDisconnect={disconnectNode} onDeleteNode={requestDeleteNode} onAddNode={() => setShowNodePicker(true)} />
       </main>
       <aside className="flow-run-panel"><div className="flow-run-panel-head"><div className="run-panel-icon"><CirclePlay size={17} /></div><div><b>Ejecución manual</b><small>{enabled(draft) ? 'Prueba el flujo con una entrada real' : 'Reactiva el flujo para ejecutar'}</small></div></div><label>Texto de entrada<textarea rows={5} value={input} onChange={(event) => setInput((event.target as HTMLTextAreaElement).value)} placeholder="Escribe el texto que recibirá el flujo…" /></label><label>Proyecto para leer / escribir<select value={projectForRun} onChange={(event) => setProjectForRun((event.target as HTMLSelectElement).value)}><option value="">Sin proyecto seleccionado</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label><button className="button button-primary run-flow-button" onClick={() => void execute()} disabled={busy || isGenerating || !enabled(draft) || isUnsavedDraft}><CirclePlay size={16} />{busyAction === 'run' ? 'Ejecutando…' : 'Ejecutar flujo'}</button><div className="run-safety-footnote"><span className="mini-shield">⌑</span>Cada ejecución confirmada se registra en el servidor. Las llamadas a IA/HTTP y las escrituras requieren autorización.</div>
         {busyAction === 'run' && <div className="automation-run-pending" role="status" aria-live="polite"><LoaderCircle size={15} className="spin" /><span>El motor está ejecutando los pasos del flujo…</span></div>}
@@ -364,7 +529,14 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
         {runHistory.length > 0 && <div className="run-history"><h4>Últimas ejecuciones</h4>{runHistory.slice(0, 5).map((item, index) => <div key={item.id || index}><span className={item.status === 'complete' ? 'history-success-dot' : item.status === 'running' ? 'automation-run-dot' : 'history-error-dot'} />{item.status || 'complete'}<small>{item.finishedAt ? new Date(item.finishedAt).toLocaleTimeString() : 'ahora'}</small></div>)}</div>}
       </aside></div>
     </>}
-    {showNodePicker && <Modal title="Añadir un nodo" description="Selecciona un bloque para colocarlo en el lienzo y conectarlo por sus puertos." onClose={() => setShowNodePicker(false)}><div className="node-picker-list">{catalog.map(({ type, label, description, Icon }) => <button key={type} onClick={() => addNode(type)}><span><Icon size={16} /></span><div><b>{label}</b><small>{description}</small></div><Plus size={14} /></button>)}</div></Modal>}
+    <WorkflowAgentDock options={generatorOptions} loading={generatorOptionsLoading} isGenerating={isGenerating} proposalReady={Boolean(proposal)} activeProviderId={dockProviderId} activeModelId={modelValue} onProviderChange={selectDockProvider} onModelChange={setSelectedGeneratorModelId} onGenerate={(request) => void generate(request)} onReviewProposal={() => setGenerationNotice('Revisa la propuesta en el panel abierto; todavía no se ha aplicado al lienzo.')} onGoProviders={onGoProviders} />
+    {proposal && <Modal wide title="Revisa la propuesta del agente" description="La IA preparó un plan, pero no ha creado ni guardado nada. Comprueba los pasos y decide qué hacer." onClose={() => setProposal(null)}>
+      <div className="workflow-proposal-meta"><span className="workflow-proposal-orb"><Sparkles size={16} /></span><div><b>{proposal.workflow.name}</b><small>{proposal.generatedBy.providerName} · {proposal.generatedBy.modelName} · borrador no guardado</small></div><span className="workflow-proposal-stat"><strong>{proposal.workflow.nodes.length}</strong> nodos</span><span className="workflow-proposal-stat"><strong>{proposal.workflow.edges.length}</strong> conexiones</span></div>
+      <div className="workflow-proposal-list">{proposal.workflow.nodes.map((node, index) => <div className="workflow-proposal-step" key={node.id}><span>{String(index + 1).padStart(2, '0')}</span><div><b>{node.name || node.type}</b><small>{node.type === 'ai' ? 'Ejecutará el modelo configurado' : node.type === 'input' ? 'Entrada del usuario' : node.type === 'output' || node.type === 'end' ? 'Entrega de resultado' : 'Paso validado del motor'}</small></div><i className="workflow-proposal-check"><Check size={12} /></i></div>)}</div>
+      <div className="workflow-proposal-safety"><span className="mini-shield">⌑</span>Se validaron las conexiones y el grafo acíclico. Las llamadas externas y escrituras seguirán requiriendo confirmación al ejecutar.</div>
+      <div className="modal-actions"><button className="button button-quiet" onClick={() => setProposal(null)}>Rechazar</button><button className="button button-secondary" onClick={acceptProposal}><Settings2 size={14} />Aplicar y modificar</button><button className="button button-primary" onClick={acceptProposal}><Check size={14} />Aplicar al lienzo</button></div>
+    </Modal>}
+    {showNodePicker && <Modal wide title="Biblioteca de módulos" description="Conecta operaciones reales al flujo. Los módulos experimentales están visibles, pero bloqueados hasta que exista una implementación segura." onClose={() => setShowNodePicker(false)}><div className="node-picker-toolbar"><label><span>BUSCAR MÓDULO</span><input value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Buscar por nombre, categoría…" autoFocus /></label><div className="node-picker-categories">{catalogCategories.map((category) => <button key={category} className={catalogCategory === category ? 'active' : ''} onClick={() => setCatalogCategory(category)}>{category}</button>)}</div></div><div className="node-picker-groups">{catalogGroups.map(({ category, items }) => <section key={category}><div className="node-picker-group-title"><span>{category}</span><small>{items.filter((item) => item.status !== 'experimental').length} disponibles</small></div><div className="node-picker-list">{items.map((item) => { const { type, label, description, Icon, status } = item; const experimental = status === 'experimental'; return <button key={`${type}-${label}`} className={experimental ? 'node-picker-disabled' : ''} disabled={experimental} onClick={() => addNode(item)}><span><Icon size={16} /></span><div><b>{label}</b><small>{description}</small></div>{experimental ? <em>Pendiente</em> : <Plus size={14} />}</button>; })}</div></section>)}{!catalogGroups.length && <div className="node-picker-empty">No hay módulos que coincidan con tu búsqueda.</div>}</div></Modal>}
     {nodeToDelete && <Modal title="Quitar nodo" description="Se quitarán las conexiones de este nodo. Revisa los enlaces restantes antes de guardar o ejecutar el flujo." onClose={() => setNodeToDelete(null)}><div className="modal-actions"><button className="button button-quiet" onClick={() => setNodeToDelete(null)}>Cancelar</button><button className="button button-danger" onClick={() => removeNode(nodeToDelete)}><Trash2 size={14} />Quitar nodo</button></div></Modal>}
   </div>;
 }

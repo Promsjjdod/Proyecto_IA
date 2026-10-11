@@ -12,6 +12,13 @@ function owned(userId: string, id: string) {
   if (!row) throw Object.assign(new Error('Automatización no encontrada.'), { status: 404 });
   return row;
 }
+function versionDto(row: any) {
+  return { id: row.id, workflowId: row.workflow_id, name: row.name, description: row.description, nodes: JSON.parse(row.nodes_json || '[]'), edges: JSON.parse(row.edges_json || '[]'), createdAt: row.created_at };
+}
+function saveVersion(userId: string, workflowId: string, value: { name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[] }) {
+  const id = crypto.randomUUID();
+  db.prepare('INSERT INTO workflow_versions(id,workflow_id,user_id,name,description,nodes_json,edges_json,created_at) VALUES(?,?,?,?,?,?,?,?)').run(id, workflowId, userId, value.name, value.description, JSON.stringify(value.nodes), JSON.stringify(value.edges), new Date().toISOString());
+}
 function validateFields(input: any) {
   const name = String(input?.name || '').trim();
   const description = String(input?.description || '').trim();
@@ -41,6 +48,7 @@ router.post('/', (req: AuthRequest, res, next) => {
     const id = crypto.randomUUID(); const now = new Date().toISOString();
     db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
       .run(id, req.user!.id, value.name, value.description, JSON.stringify(value.nodes), JSON.stringify(value.edges), now, now);
+    saveVersion(req.user!.id, id, value);
     res.status(201).json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(id)));
   } catch (error) { next(error); }
 });
@@ -61,6 +69,7 @@ router.patch('/:workflowId', (req: AuthRequest, res, next) => {
     const now = new Date().toISOString();
     db.prepare('UPDATE workflows SET name=?,description=?,nodes_json=?,edges_json=?,updated_at=? WHERE id=?')
       .run(value.name, value.description, JSON.stringify(value.nodes), JSON.stringify(value.edges), now, current.id);
+    saveVersion(req.user!.id, current.id, value);
     res.json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(current.id)));
   } catch (error) { next(error); }
 });
@@ -68,8 +77,10 @@ router.post('/:workflowId/duplicate', (req: AuthRequest, res, next) => {
   try {
     const source = owned(req.user!.id, req.params.workflowId);
     const id = crypto.randomUUID(); const now = new Date().toISOString();
+    const name = `${source.name} (copia)`.slice(0, 100);
     db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
-      .run(id, req.user!.id, `${source.name} (copia)`.slice(0, 100), source.description, source.nodes_json, source.edges_json, source.enabled === 0 ? 0 : 1, now, now);
+      .run(id, req.user!.id, name, source.description, source.nodes_json, source.edges_json, source.enabled === 0 ? 0 : 1, now, now);
+    saveVersion(req.user!.id, id, { name, description: source.description, nodes: JSON.parse(source.nodes_json || '[]'), edges: JSON.parse(source.edges_json || '[]') });
     res.status(201).json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(id)));
   } catch (error) { next(error); }
 });
@@ -79,6 +90,25 @@ router.delete('/:workflowId', (req: AuthRequest, res, next) => {
     if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirma la eliminación de la automatización y sus registros.' });
     db.prepare('DELETE FROM workflows WHERE id=? AND user_id=?').run(req.params.workflowId, req.user!.id);
     res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+router.get('/:workflowId/versions', (req: AuthRequest, res, next) => {
+  try {
+    owned(req.user!.id, req.params.workflowId);
+    const rows = db.prepare('SELECT * FROM workflow_versions WHERE workflow_id=? AND user_id=? ORDER BY created_at DESC LIMIT 50').all(req.params.workflowId, req.user!.id) as any[];
+    res.json(rows.map(versionDto));
+  } catch (error) { next(error); }
+});
+router.post('/:workflowId/versions/:versionId/restore', (req: AuthRequest, res, next) => {
+  try {
+    const current = owned(req.user!.id, req.params.workflowId);
+    const version = db.prepare('SELECT * FROM workflow_versions WHERE id=? AND workflow_id=? AND user_id=?').get(req.params.versionId, current.id, req.user!.id) as any;
+    if (!version) return res.status(404).json({ error: 'Versión no encontrada.' });
+    const value = validateFields({ name: version.name, description: version.description, nodes: JSON.parse(version.nodes_json || '[]'), edges: JSON.parse(version.edges_json || '[]') });
+    const now = new Date().toISOString();
+    db.prepare('UPDATE workflows SET name=?,description=?,nodes_json=?,edges_json=?,updated_at=? WHERE id=? AND user_id=?').run(value.name, value.description, JSON.stringify(value.nodes), JSON.stringify(value.edges), now, current.id, req.user!.id);
+    saveVersion(req.user!.id, current.id, value);
+    res.json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(current.id)));
   } catch (error) { next(error); }
 });
 router.post('/:workflowId/run', async (req: AuthRequest, res, next) => {

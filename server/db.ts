@@ -245,6 +245,18 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE INDEX IF NOT EXISTS workflow_runs_workflow_idx ON workflow_runs(workflow_id, started_at DESC);
+CREATE TABLE IF NOT EXISTS workflow_versions (
+  id TEXT PRIMARY KEY,
+  workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  nodes_json TEXT NOT NULL DEFAULT '[]',
+  edges_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workflow_versions_workflow_idx ON workflow_versions(workflow_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS usage (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -282,6 +294,13 @@ if (!modelColumns.some((column) => column.name === 'max_input_tokens')) db.exec(
 if (!modelColumns.some((column) => column.name === 'max_output_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_output_tokens INTEGER');
 const workflowColumns = db.prepare('PRAGMA table_info(workflows)').all() as { name: string }[];
 if (!workflowColumns.some((column) => column.name === 'enabled')) db.exec('ALTER TABLE workflows ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
+// Backfill one restore point for workflows created before version history existed.
+const legacyWorkflows = db.prepare('SELECT id,user_id,name,description,nodes_json,edges_json FROM workflows').all() as any[];
+for (const workflow of legacyWorkflows) {
+  const hasVersion = db.prepare('SELECT 1 FROM workflow_versions WHERE workflow_id=? LIMIT 1').get(workflow.id);
+  if (!hasVersion) db.prepare('INSERT INTO workflow_versions(id,workflow_id,user_id,name,description,nodes_json,edges_json,created_at) VALUES(?,?,?,?,?,?,?,?)')
+    .run(cryptoId(), workflow.id, workflow.user_id, workflow.name, workflow.description || '', workflow.nodes_json || '[]', workflow.edges_json || '[]', new Date().toISOString());
+}
 
 export function createUserDefaults(userId: string) {
   const now = new Date().toISOString();

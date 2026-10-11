@@ -1,6 +1,6 @@
-# Nexus AI Workspace
+# N2N AI Automation
 
-Espacio de trabajo de IA multimodelo autoalojado. Incluye una interfaz React/Vite, una API Express modular y persistencia SQLite local. El servidor actúa como proxy hacia las APIs que configura cada usuario: las claves no se envían ni se devuelven al navegador.
+Plataforma autoalojada de automatización visual N2N con IA multimodelo. El backend conserva el nombre interno Nexus para compatibilidad con instalaciones existentes. Incluye una interfaz React/Vite, una API Express modular y persistencia SQLite local. El servidor actúa como proxy hacia las APIs que configura cada usuario: las claves no se envían ni se devuelven al navegador.
 
 > **Estado:** versión inicial funcional, todavía en desarrollo. La compilación y las pruebas automatizadas descritas abajo se han ejecutado. No se han probado llamadas contra cuentas reales de OpenAI, Anthropic, Google, DeepSeek ni servidores Ollama de terceros; disponer de un adaptador no garantiza que una cuenta, región, modelo o plan concreto lo admita.
 
@@ -15,7 +15,9 @@ Espacio de trabajo de IA multimodelo autoalojado. Incluye una interfaz React/Vit
 - **Comparación:** envía una misma entrada a dos modelos en paralelo, con historiales separados y posibilidad de continuar una conversación en el chat. Ambas llamadas usan el modo `MEDIO`; si se adjuntan imágenes, los dos modelos deben tener la capacidad de visión marcada.
 - **Imágenes:** hasta 250 MB de biblioteca por cuenta; una imagen PNG por solicitud usando `/images/generations` y formato OpenAI Images compatible (`b64_json`). El proveedor debe ser OpenAI, OpenAI-compatible o custom y el usuario aporta el identificador real del modelo. No se asume que un modelo de chat pueda generar imágenes. No están conectados Gemini Image, referencias, variaciones ni edición de imágenes.
 - **Voz del navegador:** dictado mediante `SpeechRecognition`/`webkitSpeechRecognition` cuando el navegador lo implementa, y lectura mediante `SpeechSynthesis`. El dictado puede procesarse externamente según el navegador. No se sube audio a un proveedor de IA ni hay transcripción/síntesis propia del servidor.
-- **Automatizaciones:** editor y ejecuciones manuales de flujos guardadas en SQLite. Incluye entrada, texto, transformación, condición, instrucciones de agente para nodos IA, modelo IA, lectura/escritura de archivos, salida y petición HTTPS allowlisted. No ejecuta comandos del sistema ni código arbitrario; los disparadores programados todavía no están implementados.
+- **Automatizaciones N2N:** editor visual con lienzo desplazable, zoom, minimapa, conexiones curvas, selección múltiple, movimiento conjunto, duplicación, eliminación segura, deshacer/rehacer, inspector contextual y estados de ejecución. Incluye entrada, texto, transformación, condición, instrucciones de agente para nodos IA, modelo IA, lectura/escritura de archivos, salida y petición HTTPS allowlisted. El agente fijo inferior genera propuestas reales mediante el proveedor configurado y las muestra en una revisión explícita antes de tocar el lienzo; nunca las guarda ni ejecuta automáticamente.
+- **Biblioteca modular:** módulos operativos organizados por IA, automatización, entrada/salida, integraciones, herramientas y observabilidad. Los bloques disponibles se conectan al motor real; los que todavía no tienen implementación aparecen deshabilitados como `Pendiente` y no se presentan como funcionales.
+- **Flujos y versiones:** importar/exportar JSON, duplicar, guardado en SQLite, snapshots de versiones en servidor, restauración, historial de ejecuciones y confirmaciones antes de llamadas externas o escrituras. Las exportaciones eliminan claves y campos sensibles; no se guardan credenciales en `localStorage`. No ejecuta comandos del sistema ni código arbitrario; los disparadores programados todavía no están implementados.
 - **Planes:** `FREE` y cuotas internas configurables. Los planes `PRO`/`MAX` aparecen como próximos; no hay pagos, suscripciones ni compras implementados.
 
 ## Requisitos
@@ -95,7 +97,7 @@ El archivo [.env.example](.env.example) contiene valores ilustrativos, **no secr
 
 ## Validación realizada
 
-`npm run build` ejecuta `tsc --noEmit` y `vite build`; ambos pasaron en el estado actual. `npm test` ejecuta seis pruebas automáticas sobre cifrado, presupuestos de modo, allowlist y petición local fijada por DNS, protección contra traversal/enlaces simbólicos, revisiones de archivos, conciliación de cuotas y reembolso de reservas, limpieza de adjuntos huérfanos, persistencia/ejecución de workflows y rutas de registro/sesión/CSRF/propiedad/rol admin.
+`npm run build` ejecuta `tsc --noEmit` y `vite build`; ambos pasaron en el estado actual. `npm test` ejecuta diez subpruebas automáticas sobre cifrado, presupuestos de modo, allowlist y petición local fijada por DNS, protección contra traversal/enlaces simbólicos, revisiones de archivos, conciliación de cuotas y reembolso de reservas, limpieza de adjuntos huérfanos, persistencia/ejecución de workflows y rutas de registro/sesión/CSRF/propiedad/rol admin. Las versiones de workflows comparten la misma validación de grafo y propiedad.
 
 Las pruebas no llaman a proveedores reales ni validan credenciales comerciales, streaming de un modelo real, generación de imagen externa, compatibilidad de cada modelo ni restricciones de cuota del proveedor. Configura tus propias credenciales y prueba cada endpoint/modelo antes de depender de él.
 

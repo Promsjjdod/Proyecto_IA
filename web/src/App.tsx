@@ -200,7 +200,7 @@ export default function App() {
     <div className="app-main"><Header view={view} providers={providers} modelsByProvider={modelsByProvider} providerId={providerId} modelId={modelId} mode={mode} onModelChange={updateModel} onModeChange={updateMode} onMenu={() => setMobileOpen(true)} />
       {loadError && <div className="global-load-error"><span>{loadError}</span><button onClick={() => setLoadError('')}>×</button></div>}
       <main className={`view-main view-${view}`}>{dataLoading && !providers.length && view !== 'chat' ? <div className="content-loading"><LoaderCircle className="spin" size={20} />Cargando espacio…</div> : <Suspense fallback={<div className="content-loading"><LoaderCircle className="spin" size={20} />Cargando vista…</div>}>{mainPage()}</Suspense>}</main>
-      <footer className="app-footer"><span><i /> {selectedModelAvailable ? 'SERVICIOS CONECTADOS' : 'CONFIGURACIÓN PENDIENTE'}</span><span>{titles[view]} · Nexus Workspace 0.1</span><span>Los proveedores externos responden con sus propias políticas</span></footer>
+      <footer className="app-footer"><span><i /> {selectedModelAvailable ? 'SERVICIOS CONECTADOS' : 'CONFIGURACIÓN PENDIENTE'}</span><span>{titles[view]} · N2N AI Automation 0.1</span><span>Los proveedores externos responden con sus propias políticas</span></footer>
     </div>
   </div>;
 }

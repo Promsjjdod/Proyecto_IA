@@ -14,4 +14,5 @@ export type Agent = { id: string; name: string; description: string; icon: strin
 export type FlowNode = { id: string; type: string; name: string; config: Record<string, any>; position?: { x: number; y: number } };
 export type FlowEdge = { source: string; target: string; sourceHandle?: string };
 export type Workflow = { id: string; name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[]; enabled?: boolean; createdAt: string; updatedAt: string };
+export type WorkflowVersion = { id: string; workflowId: string; name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[]; createdAt: string };
 export type ImageRecord = { id: string; modelId: string; prompt: string; mimeType: string; createdAt: string; fileUrl: string; size?: number };
