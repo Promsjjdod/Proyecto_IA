@@ -4,7 +4,7 @@ import { requireAuth, type AuthRequest } from '../auth.js';
 
 const router = Router();
 router.use(requireAuth);
-const allowedTools = new Set(['read_files', 'write_files']);
+const allowedTools = new Set(['read_files', 'write_files', 'run_workflows']);
 const allowedIcons = new Set(['sparkles', 'code', 'globe', 'gamepad', 'blocks', 'file-search', 'workflow', 'image', 'audio', 'bot', 'pen']);
 const allowedModes = new Set(['LOW', 'MEDIO', 'ALTO', 'EXTRA', 'MAX']);
 function parseJson(value: string, fallback: any) { try { return JSON.parse(value || JSON.stringify(fallback)); } catch { return fallback; } }

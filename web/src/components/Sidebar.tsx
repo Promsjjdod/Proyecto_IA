@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Bot, Boxes, ChevronDown, CircleHelp, Clock3, Columns2, FolderKanban, GitCompareArrows, Image as ImageIcon, LogOut, MessageSquareText, Moon, Plus, Search, Settings2, ShieldCheck, Sun, Workflow, X } from 'lucide-react';
+import { Bot, Boxes, ChevronDown, CircleHelp, Columns2, FolderKanban, GitCompareArrows, Image as ImageIcon, LogOut, MessageSquareText, Moon, Plus, Search, Settings2, ShieldCheck, Sun, Trash2, Workflow, X } from 'lucide-react';
 import type { Chat, Project, User } from '../types';
 import { BrandMark } from './common';
 
-export type ViewId = 'chat' | 'compare' | 'projects' | 'agents' | 'automations' | 'images' | 'providers' | 'settings' | 'admin';
+export type ViewId = 'chat' | 'compare' | 'projects' | 'agents' | 'automations' | 'images' | 'providers' | 'settings' | 'admin' | 'trash';
 const navSections: { label: string; items: { id: ViewId; label: string; icon: typeof MessageSquareText; badge?: string }[] }[] = [
   { label: 'ESPACIO', items: [{ id: 'chat', label: 'Chat', icon: MessageSquareText }, { id: 'compare', label: 'Comparar modelos', icon: GitCompareArrows }, { id: 'projects', label: 'Proyectos', icon: FolderKanban }, { id: 'images', label: 'Imágenes', icon: ImageIcon }] },
   { label: 'CREAR', items: [{ id: 'agents', label: 'Agentes', icon: Bot }, { id: 'automations', label: 'Automatizaciones', icon: Workflow }] },
   { label: 'AJUSTES', items: [{ id: 'providers', label: 'Proveedores', icon: Boxes }, { id: 'settings', label: 'Preferencias', icon: Settings2 }] },
 ];
 
-export function Sidebar({ view, onNavigate, chats, activeChatId, onSelectChat, onNewChat, onSearch, projects, activeProjectId, onSelectProject, user, theme, onThemeToggle, onLogout, mobileOpen, onCloseMobile }: {
-  view: ViewId; onNavigate: (view: ViewId) => void; chats: Chat[]; activeChatId: string | null; onSelectChat: (id: string) => void; onNewChat: () => void; onSearch: (q: string) => void;
+export function Sidebar({ view, onNavigate, chats, activeChatId, onSelectChat, onDeleteChat, onNewChat, onSearch, projects, activeProjectId, onSelectProject, user, theme, onThemeToggle, onLogout, mobileOpen, onCloseMobile }: {
+  view: ViewId; onNavigate: (view: ViewId) => void; chats: Chat[]; activeChatId: string | null; onSelectChat: (id: string) => void; onDeleteChat: (chat: Chat) => void; onNewChat: () => void; onSearch: (q: string) => void;
   projects: Project[]; activeProjectId: string | null; onSelectProject: (id: string | null) => void; user: User; theme: string; onThemeToggle: () => void; onLogout: () => void; mobileOpen: boolean; onCloseMobile: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -43,7 +43,8 @@ export function Sidebar({ view, onNavigate, chats, activeChatId, onSelectChat, o
           <button className="history-header" onClick={() => setHistoryOpen(!historyOpen)}><span>RECIENTES</span><ChevronDown size={13} className={historyOpen ? '' : 'rotate-180'} /></button>
           {historyOpen && <>
             <div className="history-search"><Search size={13} /><input value={query} onChange={(event) => { setQuery(event.target.value); onSearch(event.target.value); }} placeholder="Buscar chats" aria-label="Buscar chats" />{query && <button onClick={() => { setQuery(''); onSearch(''); }} aria-label="Borrar búsqueda">×</button>}</div>
-            <div className="chat-history-list">{chats.length ? chats.map((chat) => <button key={chat.id} className={`history-chat ${activeChatId === chat.id && view === 'chat' ? 'selected' : ''}`} title={chat.title} onClick={() => { onSelectChat(chat.id); onNavigate('chat'); onCloseMobile(); }}><MessageSquareText size={14} /><span>{chat.title}</span></button>) : <p className="history-empty">{query ? 'Sin coincidencias' : 'Tus conversaciones aparecerán aquí'}</p>}</div>
+            <div className="chat-history-list">{chats.length ? chats.map((chat) => <div className={`history-chat-row ${activeChatId === chat.id && view === 'chat' ? 'selected' : ''}`} key={chat.id}><button className="history-chat" title={chat.title} onClick={() => { onSelectChat(chat.id); onNavigate('chat'); onCloseMobile(); }}><MessageSquareText size={14} /><span>{chat.title}</span></button><button className="history-chat-delete" title={`Mover ${chat.title} a la papelera`} aria-label={`Mover conversación ${chat.title} a la papelera`} onClick={() => onDeleteChat(chat)}><Trash2 size={13} /></button></div>) : <p className="history-empty">{query ? 'Sin coincidencias' : 'Tus conversaciones aparecerán aquí'}</p>}</div>
+            <button className={`history-trash-link ${view === 'trash' ? 'active' : ''}`} onClick={() => { onNavigate('trash'); onCloseMobile(); }}><Trash2 size={13} /><span>Papelera</span></button>
           </>}
         </div>
       </nav>

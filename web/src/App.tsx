@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { api, setCsrfToken } from './api';
-import type { Agent, Chat, ImageRecord, Message, Model, Mode, Project, Provider, User, Workflow } from './types';
+import type { Agent, Attachment, Chat, ImageRecord, Message, Model, Mode, Project, Provider, User, Workflow } from './types';
 import { Sidebar, type ViewId } from './components/Sidebar';
 import { Header } from './components/Header';
 import { BrandMark } from './components/common';
@@ -16,8 +16,10 @@ const ImagesPage = lazy(() => import('./components/ImagesPage').then((module) =>
 const ComparePage = lazy(() => import('./components/ComparePage').then((module) => ({ default: module.ComparePage })));
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const AdminPage = lazy(() => import('./components/AdminPage').then((module) => ({ default: module.AdminPage })));
+const TrashPage = lazy(() => import('./components/TrashPage').then((module) => ({ default: module.TrashPage })));
 
-const titles: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Agentes', automations: 'Automatizaciones', images: 'Imágenes', providers: 'Proveedores', settings: 'Preferencias', admin: 'Administración' };
+const titles: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Agentes', automations: 'Automatizaciones', images: 'Imágenes', providers: 'Proveedores', settings: 'Preferencias', admin: 'Administración', trash: 'Papelera' };
+type PendingAttachment = Attachment & { preview?: string };
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -30,6 +32,8 @@ export default function App() {
   const [chatSearch, setChatSearch] = useState('');
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [pendingChatAttachments, setPendingChatAttachments] = useState<PendingAttachment[]>([]);
+  const [projectFileRequest, setProjectFileRequest] = useState<{ projectId: string; path: string; requestId: string } | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -146,6 +150,29 @@ export default function App() {
   const updateUser = (nextUser: User) => setUser(nextUser);
   const changeTheme = (nextTheme: string) => setTheme(nextTheme);
   const selectChat = (id: string) => { setActiveChatId(id); setSelectedAgentId(''); setView('chat'); };
+  const removeChat = async (chat: Chat) => {
+    if (!window.confirm(`¿Mover «${chat.title}» a la papelera? Podrás restaurarlo más tarde.`)) return;
+    try {
+      await api(`/chats/${encodeURIComponent(chat.id)}`, { method: 'DELETE' });
+      const remaining = chats.filter((item) => item.id !== chat.id);
+      setChats(remaining);
+      if (activeChatId === chat.id) {
+        const nextChat = remaining[0] || null;
+        setActiveChatId(nextChat?.id || null); setMessages([]); setView('chat'); setSelectedAgentId('');
+      }
+      void refreshChats();
+    } catch (error) { setLoadError(error instanceof Error ? error.message : 'No se pudo eliminar la conversación.'); }
+  };
+  const useImageInChat = (image: ImageRecord) => {
+    if (pendingChatAttachments.length >= 5) { setLoadError('Un mensaje admite hasta 5 adjuntos. Envía o quita alguno antes de añadir otra imagen.'); return; }
+    setPendingChatAttachments((current) => [...current, { id: image.id, name: `imagen-${image.id}.png`, mimeType: image.mimeType, size: image.size || 0, isImage: true, source: 'image-library', fileUrl: image.fileUrl }]);
+    setView('chat'); setLoadError('');
+  };
+  const openProjectFile = (projectId: string, filePath: string) => {
+    updateActiveProject(projectId);
+    setProjectFileRequest({ projectId, path: filePath, requestId: crypto.randomUUID() });
+    setView('projects');
+  };
   const continueCompare = (id: string, nextProvider: string, nextModel: string) => { setActiveChatId(id); setProviderId(nextProvider); setModelId(nextModel); setView('chat'); setSelectedAgentId(''); };
   const onAgentChange = (id: string) => { setSelectedAgentId(id); const agent = agents.find((item) => item.id === id); if (agent) { setMode(agent.mode); if (agent.providerId && agent.modelId) { setProviderId(agent.providerId); setModelId(agent.modelId); } } };
   const onSearch = (value: string) => setChatSearch(value);
@@ -156,19 +183,20 @@ export default function App() {
   const selectedModelAvailable = (modelsByProvider[providerId] || []).some((item) => item.id === modelId && item.status !== 'unavailable');
   const mainPage = () => {
     switch (view) {
-      case 'chat': return <ChatPage user={user} chats={chats} chatId={activeChatId} onChatChange={setActiveChatId} messages={messages} onMessagesChange={setMessages} onRefreshChats={refreshWorkspace} onRefreshUsage={refreshUsage} providers={providers} modelsByProvider={modelsByProvider} providerId={providerId} modelId={modelId} mode={mode} agents={agents} selectedAgentId={selectedAgentId} onAgentChange={onAgentChange} activeProjectId={activeProjectId} projects={projects} onGoProviders={() => setView('providers')} onModeChange={updateMode} />;
+      case 'chat': return <ChatPage user={user} chats={chats} chatId={activeChatId} onChatChange={setActiveChatId} messages={messages} onMessagesChange={setMessages} onRefreshChats={refreshWorkspace} onRefreshUsage={refreshUsage} providers={providers} modelsByProvider={modelsByProvider} providerId={providerId} modelId={modelId} mode={mode} agents={agents} selectedAgentId={selectedAgentId} onAgentChange={onAgentChange} activeProjectId={activeProjectId} projects={projects} onGoProviders={() => setView('providers')} onModeChange={updateMode} pendingAttachments={pendingChatAttachments} onPendingAttachmentsConsumed={() => setPendingChatAttachments([])} onOpenProjectFile={openProjectFile} />;
       case 'providers': return <ProviderPage providers={providers} modelsByProvider={modelsByProvider} onRefresh={() => { void loadProviders(); }} />;
       case 'agents': return <AgentsPage agents={agents} providers={providers} modelsByProvider={modelsByProvider} selectedAgentId={selectedAgentId} onAgentChange={onAgentChange} onRefresh={() => void refreshAgents()} onGoChat={() => setView('chat')} activeProjectId={activeProjectId} />;
-      case 'projects': return <ProjectsPage projects={projects} activeProjectId={activeProjectId} onSelectProject={updateActiveProject} onRefresh={() => void refreshProjects()} />;
+      case 'projects': return <ProjectsPage projects={projects} activeProjectId={activeProjectId} onSelectProject={updateActiveProject} onUseInChat={(projectId) => { updateActiveProject(projectId); setView('chat'); }} onRefresh={() => void refreshProjects()} openFileRequest={projectFileRequest} onOpenFileRequestHandled={(requestId) => setProjectFileRequest((current) => current?.requestId === requestId ? null : current)} />;
       case 'automations': return <AutomationPage workflows={workflows} providers={providers} modelsByProvider={modelsByProvider} agents={agents} projects={projects} activeProjectId={activeProjectId} onRefresh={() => void refreshWorkflows()} onRefreshUsage={refreshUsage} />;
-      case 'images': return <ImagesPage providers={providers} projects={projects} activeProjectId={activeProjectId} onRefreshProjects={() => void refreshProjects()} onRefreshUsage={refreshUsage} />;
+      case 'images': return <ImagesPage providers={providers} projects={projects} activeProjectId={activeProjectId} onRefreshProjects={() => void refreshProjects()} onRefreshUsage={refreshUsage} onUseInChat={useImageInChat} />;
       case 'compare': return <ComparePage user={user} providers={providers} modelsByProvider={modelsByProvider} activeProjectId={activeProjectId} onContinue={continueCompare} onRefreshUsage={refreshUsage} />;
       case 'settings': return <SettingsPage user={user} providers={providers} modelsByProvider={modelsByProvider} mode={mode} onModeChange={updateMode} onUserUpdated={updateUser} onThemeChanged={changeTheme} />;
       case 'admin': return <AdminPage user={user} />;
+      case 'trash': return <TrashPage onRefreshChats={() => void refreshChats()} />;
     }
   };
   return <div className="app-root" data-theme={theme}>
-    <Sidebar view={view} onNavigate={setView} chats={chats} activeChatId={activeChatId} onSelectChat={selectChat} onNewChat={newChat} onSearch={onSearch} projects={projects} activeProjectId={activeProjectId} onSelectProject={updateActiveProject} user={user} theme={theme} onThemeToggle={() => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); void api('/profile/preferences', { method: 'PATCH', body: JSON.stringify({ preferences: { theme: next } }) }).then((result: any) => setUser((current) => current ? { ...current, preferences: result.preferences } : current)).catch(() => undefined); }} onLogout={() => void logout()} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
+    <Sidebar view={view} onNavigate={setView} chats={chats} activeChatId={activeChatId} onSelectChat={selectChat} onDeleteChat={(chat) => void removeChat(chat)} onNewChat={newChat} onSearch={onSearch} projects={projects} activeProjectId={activeProjectId} onSelectProject={updateActiveProject} user={user} theme={theme} onThemeToggle={() => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); void api('/profile/preferences', { method: 'PATCH', body: JSON.stringify({ preferences: { theme: next } }) }).then((result: any) => setUser((current) => current ? { ...current, preferences: result.preferences } : current)).catch(() => undefined); }} onLogout={() => void logout()} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
     <div className="app-main"><Header view={view} providers={providers} modelsByProvider={modelsByProvider} providerId={providerId} modelId={modelId} mode={mode} onModelChange={updateModel} onModeChange={updateMode} onMenu={() => setMobileOpen(true)} />
       {loadError && <div className="global-load-error"><span>{loadError}</span><button onClick={() => setLoadError('')}>×</button></div>}
       <main className={`view-main view-${view}`}>{dataLoading && !providers.length && view !== 'chat' ? <div className="content-loading"><LoaderCircle className="spin" size={20} />Cargando espacio…</div> : <Suspense fallback={<div className="content-loading"><LoaderCircle className="spin" size={20} />Cargando vista…</div>}>{mainPage()}</Suspense>}</main>

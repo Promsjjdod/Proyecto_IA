@@ -67,10 +67,12 @@ router.post('/:workflowId/run', async (req: AuthRequest, res, next) => {
     const workflow = owned(req.user!.id, req.params.workflowId);
     const nodes = JSON.parse(workflow.nodes_json || '[]') as FlowNode[];
     const external = nodes.some((node) => node.type === 'ai' || node.type === 'http');
+    const writes = nodes.some((node) => node.type === 'write_file');
     if (external && req.body?.confirmExternalResources !== true) return res.status(400).json({ error: 'Confirma que este flujo puede enviar datos a un proveedor externo o a un host permitido.' });
+    if (writes && req.body?.confirmProjectWrites !== true) return res.status(400).json({ error: 'Confirma que este flujo puede crear o reemplazar archivos del proyecto.' });
     const input = String(req.body?.input || '');
     const projectId = req.body?.projectId ? String(req.body.projectId) : null;
-    const result = await executeWorkflow(req.user!, workflow, input, projectId);
+    const result = await executeWorkflow(req.user!, workflow, input, projectId, undefined, writes);
     res.json(result);
   } catch (error) { next(error); }
 });

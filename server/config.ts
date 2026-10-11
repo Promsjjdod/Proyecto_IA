@@ -29,12 +29,28 @@ export const MODE_POLICIES = {
   MAX: { outputTokens: 6_000, inputContextTokens: 32_000, label: 'Máxima configuración disponible' },
 } as const;
 export type UsageMode = keyof typeof MODE_POLICIES;
+export type ModelTokenLimits = { contextTokens?: number | null; maxInputTokens?: number | null; maxOutputTokens?: number | null };
 
-export function budgetForMode(mode: UsageMode, modelContextTokens?: number | null) {
+function positiveTokenLimit(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/** Applies distinct provider limits. contextTokens is the aggregate window; maxInput/maxOutput are independent advertised ceilings. */
+export function budgetForMode(mode: UsageMode, limits: ModelTokenLimits = {}) {
   const requested = MODE_POLICIES[mode] || MODE_POLICIES.MEDIO;
-  const context = Number.isFinite(Number(modelContextTokens)) && Number(modelContextTokens) > 0 ? Math.floor(Number(modelContextTokens)) : 8192;
-  const outputTokens = Math.min(requested.outputTokens, context - 512);
-  return { outputTokens: Math.max(0, outputTokens), inputContextTokens: Math.max(0, Math.min(requested.inputContextTokens, context - Math.max(0, outputTokens))) };
+  const configuredContext = positiveTokenLimit(limits.contextTokens);
+  const configuredInput = positiveTokenLimit(limits.maxInputTokens);
+  const configuredOutput = positiveTokenLimit(limits.maxOutputTokens);
+  // When neither aggregate context nor a provider input ceiling is known, use only a local fallback.
+  const context = configuredContext ?? (configuredInput === null ? 8192 : null);
+  const outputTokens = Math.max(0, Math.min(requested.outputTokens, configuredOutput ?? Number.POSITIVE_INFINITY, context === null ? Number.POSITIVE_INFINITY : context - 512));
+  const inputContextTokens = Math.max(0, Math.min(
+    requested.inputContextTokens,
+    configuredInput ?? Number.POSITIVE_INFINITY,
+    context === null ? Number.POSITIVE_INFINITY : context - outputTokens,
+  ));
+  return { outputTokens, inputContextTokens };
 }
 
 export const BUILTIN_AGENTS = [

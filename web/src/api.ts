@@ -33,6 +33,7 @@ export type StreamHandlers = {
   onDelta: (text: string) => void;
   onStatus?: (status: any) => void;
   onTool?: (tool: any) => void;
+  onFinish?: (finish: any) => void;
   onError?: (message: string) => void;
   onDone?: (payload: any) => void;
 };
@@ -64,22 +65,29 @@ export async function streamChat(chatId: string, payload: Record<string, unknown
     if (eventType === 'delta') handlers.onDelta(String(data.text || ''));
     else if (eventType === 'status') handlers.onStatus?.(data);
     else if (eventType === 'tool') handlers.onTool?.(data);
+    else if (eventType === 'finish') handlers.onFinish?.(data);
     else if (eventType === 'error') handlers.onError?.(String(data.error || 'Error del proveedor.'));
     else if (eventType === 'done') { donePayload = data; handlers.onDone?.(data); }
   };
+  let streamEnded = false;
+  const boundaryPattern = /(?:\r\n|\r|\n){2}/;
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done) { streamEnded = true; buffer += decoder.decode(); break; }
       buffer += decoder.decode(value, { stream: true });
-      let boundary = buffer.indexOf('\n\n');
-      while (boundary >= 0) {
-        dispatch(buffer.slice(0, boundary));
-        buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf('\n\n');
+      let boundary = boundaryPattern.exec(buffer);
+      while (boundary) {
+        dispatch(buffer.slice(0, boundary.index));
+        buffer = buffer.slice(boundary.index + boundary[0].length);
+        boundary = boundaryPattern.exec(buffer);
       }
     }
     if (buffer.trim()) dispatch(buffer);
-  } finally { reader.releaseLock(); }
+  } finally {
+    if (!streamEnded) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+  if (!donePayload) throw new Error('La conexión terminó sin confirmar el estado final. La respuesta puede estar incompleta; revisa el historial antes de reintentar.');
   return donePayload;
 }

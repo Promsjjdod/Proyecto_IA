@@ -1,9 +1,10 @@
 import { decryptSecret, redactedError } from '../security.js';
 import { safeProviderFetch } from './safety.js';
 import type { CanonicalMessage, ProviderRecord, StreamEvent, ToolCall, ToolDefinition } from './types.js';
+import { parseProviderSSE } from './sse.js';
 import { MODE_POLICIES, type UsageMode } from '../config.js';
 
-export type ModelSummary = { id: string; displayName: string; contextTokens?: number };
+export type ModelSummary = { id: string; displayName: string; contextTokens?: number; maxInputTokens?: number; maxOutputTokens?: number };
 
 function policyFor(mode: UsageMode, outputTokenLimit?: number) {
   const base = MODE_POLICIES[mode] || MODE_POLICIES.MEDIO;
@@ -74,20 +75,31 @@ async function fetchModels(provider: ProviderRecord): Promise<ModelSummary[]> {
     const items = Array.isArray(result.models) ? result.models : [];
     return items.filter((m: any) => typeof m.name === 'string').map((m: any) => ({
       id: modelIdForGoogle(m.name), displayName: m.displayName || modelIdForGoogle(m.name),
-      ...(Number.isFinite(m.inputTokenLimit) ? { contextTokens: m.inputTokenLimit } : {}),
+      ...(Number.isSafeInteger(m.inputTokenLimit) && m.inputTokenLimit > 0 ? { maxInputTokens: m.inputTokenLimit } : {}),
+      ...(Number.isSafeInteger(m.outputTokenLimit) && m.outputTokenLimit > 0 ? { maxOutputTokens: m.outputTokenLimit } : {}),
     }));
   }
   if (provider.type === 'ollama') {
     const items = Array.isArray(result.models) ? result.models : [];
-    return items.filter((m: any) => typeof m.name === 'string').map((m: any) => ({
-      id: m.name, displayName: m.name, ...(Number.isFinite(m.context_length) ? { contextTokens: m.context_length } : {}),
-    }));
+    return items.filter((m: any) => typeof m.name === 'string').map((m: any) => {
+      const context = m.context_length ?? m.context_window;
+      const input = m.max_input_tokens ?? m.input_token_limit;
+      const output = m.max_output_tokens ?? m.output_token_limit;
+      return { id: m.name, displayName: m.name,
+        ...(Number.isSafeInteger(Number(context)) && Number(context) > 0 ? { contextTokens: Number(context) } : {}),
+        ...(Number.isSafeInteger(Number(input)) && Number(input) > 0 ? { maxInputTokens: Number(input) } : {}),
+        ...(Number.isSafeInteger(Number(output)) && Number(output) > 0 ? { maxOutputTokens: Number(output) } : {}) };
+    });
   }
   const items = Array.isArray(result.data) ? result.data : Array.isArray(result.models) ? result.models : [];
   return items.filter((m: any) => typeof m.id === 'string').map((m: any) => {
-    const context = m.context_length ?? m.context_window ?? m.max_input_tokens;
+    const context = m.context_length ?? m.context_window ?? m.context_tokens;
+    const input = m.max_input_tokens ?? m.input_token_limit ?? m.inputTokenLimit;
+    const output = m.max_output_tokens ?? m.max_completion_tokens ?? m.output_token_limit;
     return { id: m.id, displayName: m.display_name || m.name || m.id,
-      ...(Number.isFinite(context) ? { contextTokens: Number(context) } : {}) };
+      ...(Number.isSafeInteger(Number(context)) && Number(context) > 0 ? { contextTokens: Number(context) } : {}),
+      ...(Number.isSafeInteger(Number(input)) && Number(input) > 0 ? { maxInputTokens: Number(input) } : {}),
+      ...(Number.isSafeInteger(Number(output)) && Number(output) > 0 ? { maxOutputTokens: Number(output) } : {}) };
   });
 }
 
@@ -148,55 +160,6 @@ function prepareGoogleContents(messages: CanonicalMessage[]) {
   return { system, contents };
 }
 
-async function parseSSE(response: Response, provider: ProviderRecord, signal?: AbortSignal): Promise<AsyncGenerator<string>> {
-  if (!response.body) throw new Error('El proveedor devolvió una respuesta vacía.');
-  const streamBody = response.body!;
-  async function* iterate() {
-    const reader = streamBody.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    try {
-      while (true) {
-        if (signal?.aborted) throw signal.reason || new Error('Solicitud cancelada.');
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let separator = buffer.indexOf('\n\n');
-        while (separator >= 0) {
-          const block = buffer.slice(0, separator).replace(/\r/g, '');
-          buffer = buffer.slice(separator + 2);
-          const data = block.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-          if (data && data !== '[DONE]') {
-            let event: any;
-            try { event = JSON.parse(data); } catch { throw new Error('El proveedor devolvió un evento SSE inválido.'); }
-            if (provider.type === 'anthropic') {
-              if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) yield event.delta.text;
-              if (event.type === 'error') throw new Error(providerMessage(provider, event.error?.message || 'Error de streaming.'));
-            } else if (provider.type === 'google') {
-              const text = event.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('');
-              if (text) yield text;
-            } else {
-              const text = event.choices?.[0]?.delta?.content;
-              if (typeof text === 'string' && text) yield text;
-              else if (Array.isArray(text)) for (const part of text) if (typeof part.text === 'string') yield part.text;
-            }
-          }
-          separator = buffer.indexOf('\n\n');
-        }
-      }
-      if (buffer.trim()) {
-        const data = buffer.replace(/\r/g, '').split('\n').find((line) => line.startsWith('data:'))?.slice(5).trim();
-        if (data && data !== '[DONE]') {
-          const event = JSON.parse(data) as any;
-          const text = event.choices?.[0]?.delta?.content || event.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('');
-          if (typeof text === 'string' && text) yield text;
-        }
-      }
-    } finally { reader.releaseLock(); }
-  }
-  return iterate();
-}
-
 export async function* streamCompletion(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, signal?: AbortSignal, outputTokenLimit?: number): AsyncGenerator<StreamEvent> {
   const policy = policyFor(mode, outputTokenLimit);
   try {
@@ -217,8 +180,10 @@ export async function* streamCompletion(provider: ProviderRecord, model: string,
     }
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
     if (!response.ok) return await responseError(provider, response);
-    const stream = await parseSSE(response, provider, signal);
-    for await (const text of stream) yield { type: 'delta', text };
+    for await (const event of parseProviderSSE(response, provider.type)) {
+      if (signal?.aborted) throw signal.reason || new Error('Solicitud cancelada.');
+      yield event;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : `No se pudo contactar con ${provider.name}.`;
     throw new Error(providerMessage(provider, message));
@@ -246,9 +211,9 @@ export async function completeText(provider: ProviderRecord, model: string, mess
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
     if (!response.ok) return await responseError(provider, response);
     const result = await response.json() as any;
-    if (provider.type === 'google') return { text: result.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '', usage: result.usageMetadata };
-    if (provider.type === 'anthropic') return { text: result.content?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || '', usage: result.usage };
-    return { text: result.choices?.[0]?.message?.content || '', usage: result.usage };
+    if (provider.type === 'google') return { text: result.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '', usage: result.usageMetadata, finishReason: result.candidates?.[0]?.finishReason || null };
+    if (provider.type === 'anthropic') return { text: result.content?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || '', usage: result.usage, finishReason: result.stop_reason || null };
+    return { text: result.choices?.[0]?.message?.content || '', usage: result.usage, finishReason: result.choices?.[0]?.finish_reason || null };
   } catch (error) {
     throw new Error(providerMessage(provider, error instanceof Error ? error.message : `No se pudo contactar con ${provider.name}.`));
   }
@@ -279,14 +244,15 @@ export async function completeWithTools(provider: ProviderRecord, model: string,
     if (provider.type === 'anthropic') {
       const blocks = result.content || [];
       return { text: blocks.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
-        calls: blocks.filter((p: any) => p.type === 'tool_use').map((p: any) => ({ id: p.id, name: p.name, arguments: p.input || {} })) as ToolCall[] };
+        calls: blocks.filter((p: any) => p.type === 'tool_use').map((p: any) => ({ id: p.id, name: p.name, arguments: p.input || {} })) as ToolCall[],
+        finishReason: result.stop_reason || null, usage: result.usage };
     }
     const message = result.choices?.[0]?.message || {};
     return { text: typeof message.content === 'string' ? message.content : '', calls: (message.tool_calls || []).map((call: any) => {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(call.function?.arguments || '{}'); } catch { throw new Error('El modelo devolvió argumentos de herramienta con formato JSON inválido.'); }
       return { id: call.id, name: call.function?.name, arguments: args };
-    }) as ToolCall[] };
+    }) as ToolCall[], finishReason: result.choices?.[0]?.finish_reason || null, usage: result.usage };
   } catch (error) {
     throw new Error(providerMessage(provider, error instanceof Error ? error.message : `No se pudieron invocar herramientas en ${provider.name}.`));
   }
