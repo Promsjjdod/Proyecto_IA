@@ -229,6 +229,7 @@ CREATE TABLE IF NOT EXISTS workflows (
   description TEXT NOT NULL DEFAULT '',
   nodes_json TEXT NOT NULL DEFAULT '[]',
   edges_json TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -279,6 +280,8 @@ db.exec('CREATE INDEX IF NOT EXISTS chats_deleted_recent_idx ON chats(user_id, d
 const modelColumns = db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[];
 if (!modelColumns.some((column) => column.name === 'max_input_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_input_tokens INTEGER');
 if (!modelColumns.some((column) => column.name === 'max_output_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_output_tokens INTEGER');
+const workflowColumns = db.prepare('PRAGMA table_info(workflows)').all() as { name: string }[];
+if (!workflowColumns.some((column) => column.name === 'enabled')) db.exec('ALTER TABLE workflows ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
 
 export function createUserDefaults(userId: string) {
   const now = new Date().toISOString();

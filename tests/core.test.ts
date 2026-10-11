@@ -19,6 +19,7 @@ const { parseProviderSSE } = await import('../server/providers/sse.js');
 const { streamCompletion } = await import('../server/providers/index.js');
 const paths = await import('../server/workspaces/paths.js');
 const { executeWorkflow, validateWorkflow } = await import('../server/workflows/engine.js');
+const { generateWorkflowDraft, getWorkflowGeneratorOptions } = await import('../server/workflows/generator.js');
 const { PROJECT_DIR, UPLOAD_DIR, budgetForMode } = await import('../server/config.js');
 const { cleanupUnreferencedAttachments } = await import('../server/uploads.js');
 const { reserveUsage, settleUsage } = await import('../server/usage.js');
@@ -247,6 +248,7 @@ test('workflow graph validates cycles and executes persisted transforms with int
   db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
     .run(workflowId, user.id, 'Transform', '', JSON.stringify(nodes), JSON.stringify(edges), now, now);
   const workflow = db.prepare('SELECT * FROM workflows WHERE id=?').get(workflowId) as any;
+  await assert.rejects(executeWorkflow(user, { ...workflow, enabled: 0 }, 'should not start'), (error: any) => error.status === 409 && /pausada/i.test(error.message));
   const result = await executeWorkflow(user, workflow, 'hello workflow');
   assert.equal(result.status, 'complete');
   assert.equal(result.output.text, 'HELLO WORKFLOW');
@@ -295,6 +297,94 @@ test('workflow graph validates cycles and executes persisted transforms with int
   assert.ok(balance < 50_000 && balance >= 0);
 });
 
+test('automation page renders an honest empty state with real create actions and no demo workflows', async () => {
+  const React = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { AutomationPage } = await import('../web/src/components/AutomationPage.js');
+  const markup = renderToStaticMarkup(React.createElement(AutomationPage, {
+    workflows: [], providers: [], modelsByProvider: {}, agents: [], projects: [], activeProjectId: null,
+    onRefresh: () => undefined, onRefreshUsage: () => undefined, onGoProviders: () => undefined, loading: false,
+  }));
+  assert.match(markup, /Todavía no tenés automatizaciones/);
+  assert.match(markup, /Generar con IA/);
+  assert.match(markup, /Crear automatización/);
+  assert.match(markup, /no se guarda ni se ejecuta/i);
+  assert.doesNotMatch(markup, /workflow-list-card/);
+  assert.doesNotMatch(markup, /Ejemplo de automatización|Demo workflow/i);
+});
+
+test('workflow generator follows provider order, uses adapters, validates plans, and never saves drafts', async (t) => {
+  const user = insertTestUser('workflow-generator@nexus.test');
+  const userWithoutProviders = insertTestUser('workflow-generator-empty@nexus.test');
+  const emptyOptions = getWorkflowGeneratorOptions(userWithoutProviders.id);
+  assert.equal(emptyOptions.secondProvider, null);
+  assert.match(emptyOptions.secondProviderReason, /al menos dos proveedores/i);
+  await assert.rejects(generateWorkflowDraft(userWithoutProviders, 'Convertí el texto de entrada a mayúsculas.'), (error: any) => error.status === 409 && error.code === 'SECOND_PROVIDER_UNAVAILABLE');
+  await assert.rejects(generateWorkflowDraft(userWithoutProviders, 'Envía mis tareas de Gmail a Slack.'), (error: any) => error.status === 422 && error.code === 'UNSUPPORTED_REQUEST');
+
+  const plan = {
+    name: 'Normalizar texto', description: 'Procesa texto con un modelo seleccionado.',
+    nodes: [
+      { id: 'start', type: 'start', name: 'Inicio manual', config: {} },
+      { id: 'input', type: 'input', name: 'Entrada', config: {} },
+      { id: 'ai', type: 'ai', name: 'Procesar texto', config: { prompt: 'Procesa {{result}}', mode: 'MEDIO' } },
+      { id: 'output', type: 'output', name: 'Resultado', config: {} },
+    ],
+    edges: [{ source: 'start', target: 'input' }, { source: 'input', target: 'ai' }, { source: 'ai', target: 'output' }],
+  };
+  let responseText = JSON.stringify(plan);
+  const requestBodies: any[] = [];
+  const server = http.createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    request.on('end', () => {
+      requestBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { content: responseText }, finish_reason: 'stop' }], usage: { prompt_tokens: 121, completion_tokens: 47 } }));
+    });
+  });
+  const port = await listen(server, '::');
+  t.after(() => close(server));
+  const previousAllowlist = process.env.OLLAMA_ALLOWED_URLS;
+  process.env.OLLAMA_ALLOWED_URLS = `http://localhost:${port}`;
+  t.after(() => { process.env.OLLAMA_ALLOWED_URLS = previousAllowlist || 'http://localhost:11434,http://127.0.0.1:11434,http://[::1]:11434'; });
+  const baseUrl = `http://localhost:${port}/v1`;
+  const now = new Date().toISOString();
+  const addGeneratorProvider = (name: string, modelId: string) => {
+    const providerId = crypto.randomUUID();
+    db.prepare(`INSERT INTO providers(id,user_id,type,name,base_url,status,created_at,updated_at) VALUES(?,?,'ollama',?,?,'connected',?,?)`)
+      .run(providerId, user.id, name, baseUrl, now, now);
+    db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,context_tokens,max_input_tokens,max_output_tokens,created_at,updated_at)
+      VALUES(?,?,?,?,'manual','available',32768,24000,4096,?,?)`)
+      .run(crypto.randomUUID(), providerId, modelId, `${name} model`, now, now);
+    return { providerId, modelId };
+  };
+  const alpha = addGeneratorProvider('Alpha Provider', 'alpha-workflow-model');
+  const middle = addGeneratorProvider('Middle Provider', 'middle-workflow-model');
+  addGeneratorProvider('Zulu Provider', 'zulu-workflow-model');
+
+  const options = getWorkflowGeneratorOptions(user.id);
+  assert.deepEqual(options.providers.map((provider) => provider.name), ['Alpha Provider', 'Middle Provider', 'Zulu Provider']);
+  assert.equal(options.secondProvider?.id, middle.providerId);
+  assert.equal(options.secondProvider?.modelId, middle.modelId);
+  assert.equal(options.secondProvider?.ready, true);
+  assert.equal('secret_encrypted' in options.providers[0], false);
+
+  const generated = await generateWorkflowDraft(user, 'Procesá el texto de entrada y devolvé el resultado.', undefined, undefined, crypto.randomUUID());
+  assert.equal(generated.generatedBy.providerId, middle.providerId);
+  assert.equal(requestBodies.at(-1)?.model, middle.modelId);
+  assert.equal(generated.nodes.find((node) => node.type === 'ai')?.config?.providerId, middle.providerId);
+  assert.equal(generated.nodes.find((node) => node.type === 'ai')?.config?.modelId, middle.modelId);
+  assert.equal(generated.usage.estimated, false);
+  assert.equal((db.prepare('SELECT COUNT(*) AS count FROM workflows WHERE user_id=?').get(user.id) as any).count, 0);
+
+  responseText = JSON.stringify({ ...plan, edges: [...plan.edges, { source: 'output', target: 'start' }] });
+  await assert.rejects(generateWorkflowDraft(user, 'Procesá el texto de entrada y devolvé el resultado.', alpha.providerId, alpha.modelId, crypto.randomUUID()), (error: any) => error.status === 422 && error.code === 'INVALID_GENERATED_WORKFLOW');
+  assert.equal(requestBodies.at(-1)?.model, alpha.modelId);
+  assert.equal((db.prepare('SELECT COUNT(*) AS count FROM workflows WHERE user_id=?').get(user.id) as any).count, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM usage WHERE user_id=? AND operation='workflow-generator' AND status='complete'").get(user.id) as any).count, 2);
+});
+
 test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles', async (t) => {
   const { createApp } = await import('../server/index.js');
   const server = createApp().listen(0, '127.0.0.1');
@@ -315,6 +405,18 @@ test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles
   };
 
   const first = await register('first@nexus.test');
+  const emptyWorkflowResponse = await fetch(`${origin}/api/workflows`, { headers: { Cookie: first.cookie } });
+  assert.equal(emptyWorkflowResponse.status, 200);
+  assert.deepEqual(await emptyWorkflowResponse.json(), []);
+  const generatorOptionsResponse = await fetch(`${origin}/api/workflows/generator-options`, { headers: { Cookie: first.cookie } });
+  assert.equal(generatorOptionsResponse.status, 200);
+  assert.equal((await generatorOptionsResponse.json() as any).secondProvider, null);
+  const blockedGeneration = await fetch(`${origin}/api/workflows/generate`, {
+    method: 'POST', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request: 'Procesá el texto que ingrese y devolvé el resultado.' }),
+  });
+  assert.equal(blockedGeneration.status, 409);
+  assert.match((await blockedGeneration.json() as any).error, /segundo proveedor|proveedores/i);
   const unauthorized = await fetch(`${origin}/api/projects`);
   assert.equal(unauthorized.status, 401);
   const noCsrf = await fetch(`${origin}/api/projects`, {
@@ -381,6 +483,21 @@ test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles
   });
   assert.equal(runFlow.status, 200);
   assert.equal((await runFlow.json() as any).output.text, 'roundtrip modificado');
+  const pauseFlow = await fetch(`${origin}/api/workflows/${savedFlow.id}/enabled`, {
+    method: 'PATCH', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }),
+  });
+  assert.equal(pauseFlow.status, 200);
+  assert.equal((await pauseFlow.json() as any).enabled, false);
+  const pausedRun = await fetch(`${origin}/api/workflows/${savedFlow.id}/run`, {
+    method: 'POST', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ input: 'must not run' }),
+  });
+  assert.equal(pausedRun.status, 409);
+  assert.match((await pausedRun.json() as any).error, /pausada/i);
+  const resumeFlow = await fetch(`${origin}/api/workflows/${savedFlow.id}/enabled`, {
+    method: 'PATCH', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }),
+  });
+  assert.equal(resumeFlow.status, 200);
+  assert.equal((await resumeFlow.json() as any).enabled, true);
   const flowRuns = await fetch(`${origin}/api/workflows/${savedFlow.id}/runs`, { headers: { Cookie: first.cookie } });
   assert.ok((await flowRuns.json() as any[]).some((item) => item.status === 'complete'));
 
@@ -388,6 +505,10 @@ test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles
   assert.equal(deniedAdmin.status, 403);
 
   const second = await register('second@nexus.test');
+  const otherUserWorkflowPause = await fetch(`${origin}/api/workflows/${savedFlow.id}/enabled`, {
+    method: 'PATCH', headers: { Cookie: second.cookie, 'X-CSRF-Token': second.body.csrfToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }),
+  });
+  assert.equal(otherUserWorkflowPause.status, 404);
   const otherUserProject = await fetch(`${origin}/api/projects/${project.id}/files`, { headers: { Cookie: second.cookie } });
   assert.equal(otherUserProject.status, 404);
 

@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Bot, Boxes, ChevronDown, CircleHelp, Columns2, FolderKanban, GitCompareArrows, Image as ImageIcon, LogOut, MessageSquareText, Moon, Plus, Search, Settings2, ShieldCheck, Sun, Trash2, Workflow, X } from 'lucide-react';
+import { Boxes, ChevronDown, CircleHelp, Columns2, FolderKanban, GitCompareArrows, Image as ImageIcon, LogOut, MessageSquareText, Moon, Plus, Search, Settings2, ShieldCheck, Sun, Sparkles, Trash2, Workflow, X } from 'lucide-react';
 import type { Chat, Project, User } from '../types';
 import { BrandMark } from './common';
 
 export type ViewId = 'chat' | 'compare' | 'projects' | 'agents' | 'automations' | 'images' | 'providers' | 'settings' | 'admin' | 'trash';
 const navSections: { label: string; items: { id: ViewId; label: string; icon: typeof MessageSquareText; badge?: string }[] }[] = [
   { label: 'ESPACIO', items: [{ id: 'chat', label: 'Chat', icon: MessageSquareText }, { id: 'compare', label: 'Comparar modelos', icon: GitCompareArrows }, { id: 'projects', label: 'Proyectos', icon: FolderKanban }, { id: 'images', label: 'Imágenes', icon: ImageIcon }] },
-  { label: 'CREAR', items: [{ id: 'agents', label: 'Agentes', icon: Bot }, { id: 'automations', label: 'Automatizaciones', icon: Workflow }] },
+  { label: 'CREAR', items: [{ id: 'agents', label: 'Habilidades', icon: Sparkles }, { id: 'automations', label: 'Automatizaciones', icon: Workflow }] },
   { label: 'AJUSTES', items: [{ id: 'providers', label: 'Proveedores', icon: Boxes }, { id: 'settings', label: 'Preferencias', icon: Settings2 }] },
 ];
 

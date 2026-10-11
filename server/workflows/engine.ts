@@ -82,7 +82,8 @@ async function safeHttpRequest(config: Record<string, unknown>, input: string, s
   return text;
 }
 
-export async function executeWorkflow(user: AuthUser, workflow: { id: string; user_id: string; nodes_json: string; edges_json: string }, inputText: string, projectId?: string | null, externalSignal?: AbortSignal, confirmProjectWrites = false) {
+export async function executeWorkflow(user: AuthUser, workflow: { id: string; user_id: string; nodes_json: string; edges_json: string; enabled?: number | boolean }, inputText: string, projectId?: string | null, externalSignal?: AbortSignal, confirmProjectWrites = false) {
+  if (workflow.enabled === 0 || workflow.enabled === false) throw Object.assign(new Error('Esta automatización está pausada. Reactívala antes de ejecutarla.'), { status: 409 });
   const active = running.get(user.id) || 0;
   if (active >= 2) throw Object.assign(new Error('Ya hay dos automatizaciones ejecutándose para este usuario.'), { status: 429 });
   if (inputText.length > 24_000) throw Object.assign(new Error('La entrada del flujo no puede superar 24 000 caracteres.'), { status: 400 });

@@ -13,5 +13,5 @@ export type ProjectFile = { path: string; name: string; type: 'file' | 'director
 export type Agent = { id: string; name: string; description: string; icon: string; instructions: string; providerId?: string | null; modelId?: string | null; mode: Mode; tools: string[]; limits: Record<string, any>; builtin: boolean; createdAt: string; updatedAt: string };
 export type FlowNode = { id: string; type: string; name: string; config: Record<string, any>; position?: { x: number; y: number } };
 export type FlowEdge = { source: string; target: string; sourceHandle?: string };
-export type Workflow = { id: string; name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[]; createdAt: string; updatedAt: string };
+export type Workflow = { id: string; name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[]; enabled?: boolean; createdAt: string; updatedAt: string };
 export type ImageRecord = { id: string; modelId: string; prompt: string; mimeType: string; createdAt: string; fileUrl: string; size?: number };

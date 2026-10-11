@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { requireAuth, type AuthRequest } from '../auth.js';
 import { executeWorkflow, validateWorkflow, type FlowNode, type FlowEdge } from './engine.js';
+import { generateWorkflowDraft, getWorkflowGeneratorOptions } from './generator.js';
 
 const router = Router();
 router.use(requireAuth);
-function dto(row: any) { return { id: row.id, name: row.name, description: row.description, nodes: JSON.parse(row.nodes_json || '[]'), edges: JSON.parse(row.edges_json || '[]'), createdAt: row.created_at, updatedAt: row.updated_at }; }
+function dto(row: any) { return { id: row.id, name: row.name, description: row.description, nodes: JSON.parse(row.nodes_json || '[]'), edges: JSON.parse(row.edges_json || '[]'), enabled: row.enabled !== 0, createdAt: row.created_at, updatedAt: row.updated_at }; }
 function owned(userId: string, id: string) {
   const row = db.prepare('SELECT * FROM workflows WHERE id=? AND user_id=?').get(id, userId) as any;
   if (!row) throw Object.assign(new Error('Automatización no encontrada.'), { status: 404 });
@@ -25,6 +26,15 @@ router.get('/', (req: AuthRequest, res) => {
   const rows = db.prepare('SELECT * FROM workflows WHERE user_id=? ORDER BY updated_at DESC').all(req.user!.id) as any[];
   res.json(rows.map(dto));
 });
+router.get('/generator-options', (req: AuthRequest, res) => {
+  res.json(getWorkflowGeneratorOptions(req.user!.id));
+});
+router.post('/generate', async (req: AuthRequest, res, next) => {
+  try {
+    const generated = await generateWorkflowDraft(req.user!, req.body?.request, req.body?.providerId, req.body?.modelId, req.body?.requestId);
+    res.json(generated);
+  } catch (error) { next(error); }
+});
 router.post('/', (req: AuthRequest, res, next) => {
   try {
     const value = validateFields(req.body);
@@ -32,6 +42,15 @@ router.post('/', (req: AuthRequest, res, next) => {
     db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
       .run(id, req.user!.id, value.name, value.description, JSON.stringify(value.nodes), JSON.stringify(value.edges), now, now);
     res.status(201).json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(id)));
+  } catch (error) { next(error); }
+});
+router.patch('/:workflowId/enabled', (req: AuthRequest, res, next) => {
+  try {
+    const current = owned(req.user!.id, req.params.workflowId);
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'El estado enabled debe ser verdadero o falso.' });
+    const now = new Date().toISOString();
+    db.prepare('UPDATE workflows SET enabled=?,updated_at=? WHERE id=? AND user_id=?').run(req.body.enabled ? 1 : 0, now, current.id, req.user!.id);
+    res.json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(current.id)));
   } catch (error) { next(error); }
 });
 router.patch('/:workflowId', (req: AuthRequest, res, next) => {
@@ -49,8 +68,8 @@ router.post('/:workflowId/duplicate', (req: AuthRequest, res, next) => {
   try {
     const source = owned(req.user!.id, req.params.workflowId);
     const id = crypto.randomUUID(); const now = new Date().toISOString();
-    db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
-      .run(id, req.user!.id, `${source.name} (copia)`.slice(0, 100), source.description, source.nodes_json, source.edges_json, now, now);
+    db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+      .run(id, req.user!.id, `${source.name} (copia)`.slice(0, 100), source.description, source.nodes_json, source.edges_json, source.enabled === 0 ? 0 : 1, now, now);
     res.status(201).json(dto(db.prepare('SELECT * FROM workflows WHERE id=?').get(id)));
   } catch (error) { next(error); }
 });

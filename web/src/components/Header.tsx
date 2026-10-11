@@ -4,7 +4,7 @@ import type { Model, Mode, Provider } from '../types';
 import { ProviderIcon } from './common';
 import type { ViewId } from './Sidebar';
 
-const pageTitle: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Agentes', automations: 'Automatizaciones', images: 'Generación de imágenes', providers: 'Proveedores de IA', settings: 'Preferencias', admin: 'Administración', trash: 'Papelera' };
+const pageTitle: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Habilidades', automations: 'Automatizaciones', images: 'Generación de imágenes', providers: 'Proveedores de IA', settings: 'Preferencias', admin: 'Administración', trash: 'Papelera' };
 const modeDetails: Record<Mode, string> = { LOW: 'Presupuesto bajo de tokens; no cambia la capacidad del modelo', MEDIO: 'Presupuesto equilibrado de tokens; no cambia la capacidad del modelo', ALTO: 'Presupuesto ampliado; la capacidad depende del modelo seleccionado', EXTRA: 'Presupuesto ampliado para programación y análisis', MAX: 'Hasta el presupuesto permitido por el modelo y la cuenta; no garantiza más capacidad' };
 const tokenLabel = (value?: number | null) => Number.isSafeInteger(value) && Number(value) > 0 ? Number(value).toLocaleString() : 'sin dato';
 

@@ -18,7 +18,7 @@ const SettingsPage = lazy(() => import('./components/SettingsPage').then((module
 const AdminPage = lazy(() => import('./components/AdminPage').then((module) => ({ default: module.AdminPage })));
 const TrashPage = lazy(() => import('./components/TrashPage').then((module) => ({ default: module.TrashPage })));
 
-const titles: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Agentes', automations: 'Automatizaciones', images: 'Imágenes', providers: 'Proveedores', settings: 'Preferencias', admin: 'Administración', trash: 'Papelera' };
+const titles: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Habilidades', automations: 'Automatizaciones', images: 'Imágenes', providers: 'Proveedores', settings: 'Preferencias', admin: 'Administración', trash: 'Papelera' };
 type PendingAttachment = Attachment & { preview?: string };
 
 export default function App() {
@@ -187,7 +187,7 @@ export default function App() {
       case 'providers': return <ProviderPage providers={providers} modelsByProvider={modelsByProvider} onRefresh={() => { void loadProviders(); }} />;
       case 'agents': return <AgentsPage agents={agents} providers={providers} modelsByProvider={modelsByProvider} selectedAgentId={selectedAgentId} onAgentChange={onAgentChange} onRefresh={() => void refreshAgents()} onGoChat={() => setView('chat')} activeProjectId={activeProjectId} />;
       case 'projects': return <ProjectsPage projects={projects} activeProjectId={activeProjectId} onSelectProject={updateActiveProject} onUseInChat={(projectId) => { updateActiveProject(projectId); setView('chat'); }} onRefresh={() => void refreshProjects()} openFileRequest={projectFileRequest} onOpenFileRequestHandled={(requestId) => setProjectFileRequest((current) => current?.requestId === requestId ? null : current)} />;
-      case 'automations': return <AutomationPage workflows={workflows} providers={providers} modelsByProvider={modelsByProvider} agents={agents} projects={projects} activeProjectId={activeProjectId} onRefresh={() => void refreshWorkflows()} onRefreshUsage={refreshUsage} />;
+      case 'automations': return <AutomationPage workflows={workflows} providers={providers} modelsByProvider={modelsByProvider} agents={agents} projects={projects} activeProjectId={activeProjectId} onRefresh={() => void refreshWorkflows()} onRefreshUsage={refreshUsage} onGoProviders={() => setView('providers')} loading={dataLoading} />;
       case 'images': return <ImagesPage providers={providers} projects={projects} activeProjectId={activeProjectId} onRefreshProjects={() => void refreshProjects()} onRefreshUsage={refreshUsage} onUseInChat={useImageInChat} />;
       case 'compare': return <ComparePage user={user} providers={providers} modelsByProvider={modelsByProvider} activeProjectId={activeProjectId} onContinue={continueCompare} onRefreshUsage={refreshUsage} />;
       case 'settings': return <SettingsPage user={user} providers={providers} modelsByProvider={modelsByProvider} mode={mode} onModeChange={updateMode} onUserUpdated={updateUser} onThemeChanged={changeTheme} />;
