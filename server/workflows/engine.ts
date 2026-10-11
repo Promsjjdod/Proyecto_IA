@@ -4,10 +4,10 @@ import { safeExternalFetch } from '../providers/safety.js';
 import type { ProviderRecord, CanonicalMessage } from '../providers/types.js';
 import { estimateTextUnits, reserveUsage, releaseUsage, settleUsage } from '../usage.js';
 import type { AuthUser } from '../auth.js';
-import { ownedProject, readProjectFile, writeProjectFile } from '../workspaces/paths.js';
+import { cleanRelativePath, ownedProject, readProjectFile, projectFilePath, validateFileName, MAX_PROJECT_FILE_BYTES, writeProjectFilesAtomically } from '../workspaces/paths.js';
 import { budgetForMode, MODE_POLICIES, type UsageMode } from '../config.js';
 
-export type FlowNode = { id: string; type: string; name?: string; config?: Record<string, unknown> };
+export type FlowNode = { id: string; type: string; name?: string; config?: Record<string, unknown>; position?: { x: number; y: number } };
 export type FlowEdge = { source: string; target: string; sourceHandle?: string };
 export const NODE_TYPES = new Set(['start', 'input', 'text', 'ai', 'agent', 'read_file', 'write_file', 'http', 'condition', 'transform', 'output', 'end']);
 const running = new Map<string, number>();
@@ -22,12 +22,16 @@ function validateGraph(nodes: FlowNode[], edges: FlowEdge[]) {
   for (const node of nodes) {
     if (!node || typeof node.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(node.id) || nodeMap.has(node.id)) throw new Error('El flujo contiene un identificador de nodo inválido o repetido.');
     if (!NODE_TYPES.has(node.type)) throw new Error(`Tipo de nodo no reconocido: ${node.type}`);
+    if (node.name !== undefined && (typeof node.name !== 'string' || node.name.length > 100)) throw new Error('El nombre de un nodo no es válido.');
+    if (node.config !== undefined && (!node.config || typeof node.config !== 'object' || Array.isArray(node.config))) throw new Error('La configuración de un nodo no es válida.');
+    if (node.position !== undefined && (!node.position || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y) || node.position.x < 0 || node.position.y < 0 || node.position.x > 50_000 || node.position.y > 50_000)) throw new Error('La posición de un nodo no es válida.');
     nodeMap.set(node.id, node);
   }
   const outgoing = new Map<string, string[]>();
   const incoming = new Map<string, string[]>();
   for (const edge of edges) {
-    if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target) || edge.source === edge.target) throw new Error('Una conexión apunta a un nodo no válido.');
+    if (!edge || !nodeMap.has(edge.source) || !nodeMap.has(edge.target) || edge.source === edge.target) throw new Error('Una conexión apunta a un nodo no válido.');
+    if (edge.sourceHandle !== undefined && (!['true', 'false'].includes(edge.sourceHandle) || nodeMap.get(edge.source)?.type !== 'condition')) throw new Error('Una conexión de rama solo puede salir de un nodo de condición y debe ser verdadera o falsa.');
     outgoing.set(edge.source, [...(outgoing.get(edge.source) || []), edge.target]);
     incoming.set(edge.target, [...(incoming.get(edge.target) || []), edge.source]);
   }
@@ -54,14 +58,14 @@ function templated(value: unknown, context: { input: string; result: string; var
     return typeof item === 'string' ? item : JSON.stringify(item ?? '');
   });
 }
-function providerFor(userId: string, providerId: unknown, modelId: unknown): { provider: ProviderRecord; modelId: string; contextTokens: number | null } {
+function providerFor(userId: string, providerId: unknown, modelId: unknown): { provider: ProviderRecord; modelId: string; contextTokens: number | null; maxInputTokens: number | null; maxOutputTokens: number | null } {
   const id = String(providerId || ''); const model = String(modelId || '');
   if (!id || !model) throw new Error('El nodo IA necesita un proveedor y un modelo.');
   const provider = db.prepare('SELECT * FROM providers WHERE id=? AND user_id=?').get(id, userId) as ProviderRecord | undefined;
-  const modelRow = db.prepare('SELECT status,context_tokens FROM provider_models WHERE provider_id=? AND model_id=?').get(id, model) as { status: string; context_tokens: number | null } | undefined;
+  const modelRow = db.prepare('SELECT status,context_tokens,max_input_tokens,max_output_tokens FROM provider_models WHERE provider_id=? AND model_id=?').get(id, model) as { status: string; context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null } | undefined;
   if (!provider || !modelRow) throw new Error('El proveedor o modelo del nodo IA no está conectado a esta cuenta.');
   if (modelRow.status === 'unavailable') throw new Error(`El modelo ${model} aparece como no disponible.`);
-  return { provider, modelId: model, contextTokens: modelRow.context_tokens };
+  return { provider, modelId: model, contextTokens: modelRow.context_tokens, maxInputTokens: modelRow.max_input_tokens, maxOutputTokens: modelRow.max_output_tokens };
 }
 async function safeHttpRequest(config: Record<string, unknown>, input: string, signal: AbortSignal) {
   const method = String(config.method || 'GET').toUpperCase();
@@ -78,21 +82,23 @@ async function safeHttpRequest(config: Record<string, unknown>, input: string, s
   return text;
 }
 
-export async function executeWorkflow(user: AuthUser, workflow: { id: string; user_id: string; nodes_json: string; edges_json: string }, inputText: string, projectId?: string | null) {
+export async function executeWorkflow(user: AuthUser, workflow: { id: string; user_id: string; nodes_json: string; edges_json: string }, inputText: string, projectId?: string | null, externalSignal?: AbortSignal, confirmProjectWrites = false) {
   const active = running.get(user.id) || 0;
   if (active >= 2) throw Object.assign(new Error('Ya hay dos automatizaciones ejecutándose para este usuario.'), { status: 429 });
   if (inputText.length > 24_000) throw Object.assign(new Error('La entrada del flujo no puede superar 24 000 caracteres.'), { status: 400 });
   const nodes = json<FlowNode[]>(workflow.nodes_json, []);
   const edges = json<FlowEdge[]>(workflow.edges_json, []);
+  if (nodes.some((node) => node.type === 'write_file') && !confirmProjectWrites) throw Object.assign(new Error('Confirma que este flujo puede escribir archivos antes de ejecutarlo.'), { status: 400 });
   const { nodeMap, order, incoming } = validateGraph(nodes, edges);
   const flowInputs = { input: inputText, result: inputText, vars: {} as Record<string, unknown>, branch: {} as Record<string, boolean> };
+  const pendingWrites = new Map<string, string>();
   const aiNodeSettings = new Map<string, { selected: ReturnType<typeof providerFor>; mode: UsageMode; budget: ReturnType<typeof budgetForMode> }>();
   for (const node of nodes.filter((item) => item.type === 'ai')) {
     const nodeMode = String(node.config?.mode || 'MEDIO').toUpperCase() as UsageMode;
     if (!(nodeMode in MODE_POLICIES)) throw Object.assign(new Error('Modo del flujo no válido.'), { status: 400 });
     const selected = providerFor(user.id, node.config?.providerId, node.config?.modelId);
-    const budget = budgetForMode(nodeMode, selected.contextTokens);
-    if (budget.outputTokens < 1 || budget.inputContextTokens < 128) throw Object.assign(new Error(`El contexto configurado para ${selected.modelId} es demasiado pequeño para el modo ${nodeMode}.`), { status: 400 });
+    const budget = budgetForMode(nodeMode, { contextTokens: selected.contextTokens, maxInputTokens: selected.maxInputTokens, maxOutputTokens: selected.maxOutputTokens });
+    if (budget.outputTokens < 1 || budget.inputContextTokens < 128) throw Object.assign(new Error(`Los límites de contexto/entrada/salida configurados para ${selected.modelId} no dejan presupuesto suficiente para el modo ${nodeMode}.`), { status: 400 });
     aiNodeSettings.set(node.id, { selected, mode: nodeMode, budget });
   }
   const mode = aiNodeSettings.values().next().value?.mode || 'MEDIO';
@@ -106,25 +112,31 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
   running.set(user.id, active + 1);
   const logs: { at: string; nodeId: string; nodeName: string; status: 'success' | 'skipped' | 'error'; message: string }[] = [];
   const completed = new Set<string>();
+  const executed = new Set<string>();
   let systemPrompt = '';
   let lastCondition: boolean | null = null;
   let totalText = inputText;
   const startedAt = Date.now();
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(externalSignal?.reason || new Error('Ejecución cancelada.'));
+  if (externalSignal?.aborted) abortFromCaller();
+  else externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
   const executionTimer = setTimeout(() => controller.abort(new Error('La automatización superó el límite de ejecución de 5 minutos.')), 300_000);
   executionTimer.unref();
   try {
     if (projectId) ownedProject(user.id, projectId);
     for (const id of order) {
+      if (controller.signal.aborted) throw controller.signal.reason || new Error('Ejecución cancelada.');
       const node = nodeMap.get(id)!;
       const cfg = node.config || {};
       const predecessors = incoming.get(id) || [];
       const relevantEdges = edges.filter((edge) => edge.target === id);
-      const shouldRun = predecessors.every((source) => completed.has(source)) && relevantEdges.every((edge) => {
+      const shouldRun = predecessors.length === 0 || (predecessors.every((source) => completed.has(source)) && relevantEdges.every((edge) => {
         const source = nodeMap.get(edge.source)!;
+        if (!executed.has(source.id)) return false;
         if (source.type !== 'condition' || !edge.sourceHandle) return true;
         return Boolean(flowInputs.branch[source.id]) === (edge.sourceHandle === 'true');
-      });
+      }));
       const when = String(cfg.when || 'always');
       const conditionMatch = when === 'always' || lastCondition === (when === 'true');
       if (!shouldRun || !conditionMatch) {
@@ -166,14 +178,20 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
           }
           case 'read_file': {
             if (!projectId) throw new Error('Selecciona un proyecto para permitir acceso a archivos.');
-            const file = readProjectFile(user.id, projectId, templated(cfg.path, flowInputs));
-            flowInputs.result = file.content;
+            const requested = cleanRelativePath(templated(cfg.path, flowInputs));
+            if (pendingWrites.has(requested)) flowInputs.result = pendingWrites.get(requested)!;
+            else flowInputs.result = readProjectFile(user.id, projectId, requested).content;
             break;
           }
           case 'write_file': {
             if (!projectId) throw new Error('Selecciona un proyecto para permitir escritura de archivos.');
-            const result = writeProjectFile(user.id, projectId, templated(cfg.path, flowInputs), templated(cfg.content || '{{result}}', flowInputs));
-            flowInputs.result = `Archivo guardado: ${result.path} (${result.bytes} bytes).`;
+            const { root } = ownedProject(user.id, projectId);
+            const target = projectFilePath(root, templated(cfg.path, flowInputs), true);
+            validateFileName(target.relative);
+            const content = templated(cfg.content || '{{result}}', flowInputs);
+            if (Buffer.byteLength(content, 'utf8') > MAX_PROJECT_FILE_BYTES) throw new Error('El archivo supera el límite de 1 MB.');
+            pendingWrites.set(target.relative, content);
+            flowInputs.result = `Archivo preparado: ${target.relative} (${Buffer.byteLength(content, 'utf8')} bytes); se guardará si el flujo termina y la validación pasa.`;
             break;
           }
           case 'ai': {
@@ -197,11 +215,24 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
           default: throw new Error(`Nodo ${node.type} no implementado.`);
         }
         completed.add(id);
+        executed.add(id);
         flowInputs.vars[id] = flowInputs.result;
         totalText += String(flowInputs.result).slice(0, 4000);
         logs.push({ at: new Date().toISOString(), nodeId: id, nodeName: node.name || node.type, status: 'success', message: `Nodo completado. Salida actual: ${String(flowInputs.result).slice(0, 160)}` });
       } catch (error) {
         logs.push({ at: new Date().toISOString(), nodeId: id, nodeName: node.name || node.type, status: 'error', message: error instanceof Error ? error.message : 'El nodo falló.' });
+        throw error;
+      }
+    }
+    if (controller.signal.aborted) throw controller.signal.reason || new Error('Ejecución cancelada.');
+    let artifacts: ReturnType<typeof writeProjectFilesAtomically> = [];
+    if (pendingWrites.size) {
+      try {
+        artifacts = writeProjectFilesAtomically(user.id, projectId!, [...pendingWrites].map(([filePath, content]) => ({ path: filePath, content })), { validateSyntax: true });
+        logs.push({ at: new Date().toISOString(), nodeId: 'workflow-save', nodeName: 'Validar y guardar archivos', status: 'success', message: `${artifacts.length} archivo(s) guardados. ${artifacts.map((file) => `${file.path}: ${file.validationMessage}`).join(' ')}` });
+        if (String(flowInputs.result).startsWith('Archivo preparado:')) flowInputs.result = `Se validaron y guardaron ${artifacts.length} archivo(s): ${artifacts.map((file) => file.path).join(', ')}.`;
+      } catch (error) {
+        logs.push({ at: new Date().toISOString(), nodeId: 'workflow-save', nodeName: 'Validar y guardar archivos', status: 'error', message: error instanceof Error ? error.message : 'No se pudieron validar los archivos.' });
         throw error;
       }
     }
@@ -211,7 +242,7 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
     settleUsage(user.id, reservation, estimatedCredits, { workflowId: workflow.id, estimated: true });
     db.prepare(`UPDATE workflow_runs SET status='complete',output_json=?,logs_json=?,finished_at=? WHERE id=?`)
       .run(JSON.stringify(output), JSON.stringify(logs), new Date().toISOString(), runId);
-    return { id: runId, status: 'complete', output, logs, elapsedMs: elapsed, estimatedCredits };
+    return { id: runId, status: 'complete', output, logs, artifacts, elapsedMs: elapsed, estimatedCredits };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error de ejecución desconocido.';
     releaseUsage(user.id, reservation, 'failed', { workflowId: workflow.id, error: message });
@@ -220,6 +251,7 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
     throw error;
   } finally {
     clearTimeout(executionTimer);
+    externalSignal?.removeEventListener('abort', abortFromCaller);
     running.set(user.id, Math.max(0, (running.get(user.id) || 1) - 1));
   }
 }

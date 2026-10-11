@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import * as ts from 'typescript';
 import { PROJECT_DIR } from '../config.js';
 import { db } from '../db.js';
 
@@ -109,30 +110,121 @@ export function assertProjectStorage(root: string, relativeInput: unknown, nextB
   if (storage.bytes - targetBytes + nextBytes > MAX_PROJECT_STORAGE_BYTES) throw Object.assign(new Error('El proyecto admite hasta 100 MB de archivos.'), { status: 413 });
 }
 
-export function writeProjectFile(userId: string, projectId: string, relativeInput: string, contentInput: unknown) {
+export function validateGeneratedFile(relative: string, content: string) {
+  const extension = path.extname(relative).toLowerCase();
+  if (extension === '.json') {
+    try { JSON.parse(content); }
+    catch (error) { throw new Error(`${relative}: JSON inválido${error instanceof Error ? ` (${error.message})` : ''}.`); }
+    return { validationStatus: 'syntax-checked' as const, validationMessage: 'JSON válido; no se ejecutó.' };
+  }
+  if (['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx'].includes(extension)) {
+    const output = ts.transpileModule(content, { fileName: relative, reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } });
+    const diagnostic = output.diagnostics?.find((item) => item.category === ts.DiagnosticCategory.Error);
+    if (diagnostic) throw new Error(`${relative}: sintaxis no válida (${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}).`);
+    return { validationStatus: 'syntax-checked' as const, validationMessage: 'Sintaxis TypeScript comprobada; no se ejecutó ni se verificaron dependencias.' };
+  }
+  return { validationStatus: 'not-run' as const, validationMessage: 'Archivo guardado; no hay validador local configurado para este formato.' };
+}
+
+type ProjectWrite = { path: string; content: string };
+type PreparedProjectWrite = ProjectWrite & { absolute: string; bytes: number; old: string | null; existed: boolean; temporary: string; backup: string; installed: boolean; backedUp: boolean; validationStatus: 'syntax-checked' | 'not-run'; validationMessage: string };
+
+/** Preflights a whole file set, stages it beside the targets, then atomically swaps the files and records revisions. */
+export function writeProjectFilesAtomically(userId: string, projectId: string, writes: ProjectWrite[], options: { validateSyntax?: boolean } = {}) {
+  if (!Array.isArray(writes) || writes.length < 1 || writes.length > 40) throw Object.assign(new Error('La tarea debe producir entre 1 y 40 archivos.'), { status: 400 });
   const { root } = ownedProject(userId, projectId);
-  const { absolute, relative } = projectFilePath(root, relativeInput, true);
-  validateFileName(relative);
-  const content = String(contentInput ?? '');
-  const contentBytes = Buffer.byteLength(content, 'utf8');
-  if (contentBytes > MAX_FILE_BYTES) throw Object.assign(new Error('El tamaño máximo por archivo es 1 MB.'), { status: 413 });
-  const exists = fs.existsSync(absolute);
-  const existingStat = exists ? fs.statSync(absolute) : null;
-  if (existingStat && !existingStat.isFile()) throw Object.assign(new Error('La ruta ya corresponde a una carpeta.'), { status: 400 });
-  const old = existingStat && existingStat.size <= MAX_FILE_BYTES ? fs.readFileSync(absolute, 'utf8') : null;
-  assertProjectStorage(root, relative, contentBytes);
+  const unique = new Map<string, string>();
+  for (const write of writes) {
+    const relative = cleanRelativePath(write.path);
+    if (!relative) throw Object.assign(new Error('La ruta del archivo no puede estar vacía.'), { status: 400 });
+    unique.set(relative, String(write.content ?? ''));
+  }
+  const records: PreparedProjectWrite[] = [...unique].map(([inputPath, content]) => {
+    const { absolute, relative } = projectFilePath(root, inputPath, true);
+    validateFileName(relative);
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (bytes > MAX_FILE_BYTES) throw Object.assign(new Error(`${relative} supera el límite de 1 MB.`), { status: 413 });
+    const validation = options.validateSyntax
+      ? validateGeneratedFile(relative, content)
+      : { validationStatus: 'not-run' as const, validationMessage: 'Validación de sintaxis no solicitada para esta escritura.' };
+    const exists = fs.existsSync(absolute);
+    let old: string | null = null;
+    if (exists) {
+      const stat = fs.lstatSync(absolute);
+      if (!stat.isFile()) throw Object.assign(new Error(`${relative} ya corresponde a una carpeta.`), { status: 400 });
+      if (stat.size > MAX_FILE_BYTES) throw Object.assign(new Error(`${relative} existente supera el límite de 1 MB y no se puede reemplazar automáticamente.`), { status: 413 });
+      old = fs.readFileSync(absolute, 'utf8');
+    }
+    const token = crypto.randomUUID();
+    return { path: relative, content, absolute, bytes, old, existed: exists, temporary: path.join(path.dirname(absolute), `.nexus-${token}.tmp`), backup: path.join(path.dirname(absolute), `.nexus-${token}.bak`), installed: false, backedUp: false, ...validation };
+  });
+  const storage = projectStorage(root);
+  let finalProjectBytes = storage.bytes;
+  const newEntries = new Set<string>();
+  let newRevisionBytes = 0;
+  for (const record of records) {
+    finalProjectBytes -= record.old === null ? 0 : Buffer.byteLength(record.old, 'utf8');
+    finalProjectBytes += record.bytes;
+    newRevisionBytes += record.bytes + (record.old === null ? 0 : Buffer.byteLength(record.old, 'utf8'));
+    let current = root;
+    const segments = record.path.split('/');
+    for (const segment of segments) {
+      current = path.join(current, segment);
+      if (!fs.existsSync(current)) newEntries.add(current);
+    }
+  }
+  if (finalProjectBytes > MAX_PROJECT_STORAGE_BYTES) throw Object.assign(new Error('El conjunto de archivos superaría el límite de 100 MB del proyecto.'), { status: 413 });
+  if (storage.entries + newEntries.size > MAX_PROJECT_ENTRIES) throw Object.assign(new Error(`El proyecto admite hasta ${MAX_PROJECT_ENTRIES} archivos y carpetas.`), { status: 413 });
   const previousRevisionBytes = (db.prepare('SELECT COALESCE(SUM(length(CAST(content AS BLOB))),0) total FROM file_revisions WHERE project_id=? AND user_id=?').get(projectId, userId) as { total: number }).total;
-  const nextRevisionBytes = contentBytes + (old !== null ? Buffer.byteLength(old, 'utf8') : 0);
-  if (previousRevisionBytes + nextRevisionBytes > MAX_PROJECT_REVISION_BYTES) throw Object.assign(new Error('El historial de versiones del proyecto alcanzó el límite de 100 MB.'), { status: 413 });
-  fs.mkdirSync(path.dirname(absolute), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(absolute, content, { encoding: 'utf8', mode: 0o600 });
-  const now = new Date().toISOString();
-  const revision = db.prepare('INSERT INTO file_revisions(id,project_id,user_id,relative_path,content,created_at) VALUES(?,?,?,?,?,?)');
-  if (old !== null) revision.run(crypto.randomUUID(), projectId, userId, relative, old, now);
-  revision.run(crypto.randomUUID(), projectId, userId, relative, content, now);
-  db.prepare(`DELETE FROM file_revisions WHERE id IN (SELECT id FROM file_revisions WHERE project_id=? AND relative_path=? ORDER BY created_at DESC LIMIT -1 OFFSET 25)`).run(projectId, relative);
-  db.prepare('UPDATE projects SET updated_at=? WHERE id=?').run(now, projectId);
-  return { path: relative, bytes: contentBytes, savedAt: now };
+  if (previousRevisionBytes + newRevisionBytes > MAX_PROJECT_REVISION_BYTES) throw Object.assign(new Error('El conjunto superaría el límite de 100 MB del historial de versiones.'), { status: 413 });
+
+  let databaseCommitted = false;
+  try {
+    for (const record of records) {
+      fs.mkdirSync(path.dirname(record.absolute), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(record.temporary, record.content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    }
+    for (const record of records) {
+      if (record.existed) { fs.renameSync(record.absolute, record.backup); record.backedUp = true; }
+      fs.renameSync(record.temporary, record.absolute);
+      record.installed = true;
+    }
+    const now = new Date().toISOString();
+    const persistRevisions = db.transaction(() => {
+      const insert = db.prepare('INSERT INTO file_revisions(id,project_id,user_id,relative_path,content,created_at) VALUES(?,?,?,?,?,?)');
+      const trim = db.prepare('DELETE FROM file_revisions WHERE id IN (SELECT id FROM file_revisions WHERE project_id=? AND relative_path=? ORDER BY created_at DESC LIMIT -1 OFFSET 25)');
+      for (const record of records) {
+        if (record.old !== null) insert.run(crypto.randomUUID(), projectId, userId, record.path, record.old, now);
+        insert.run(crypto.randomUUID(), projectId, userId, record.path, record.content, now);
+        trim.run(projectId, record.path);
+      }
+      db.prepare('UPDATE projects SET updated_at=? WHERE id=? AND user_id=?').run(now, projectId, userId);
+    });
+    persistRevisions.immediate();
+    databaseCommitted = true;
+    for (const record of records) if (record.backedUp) try { fs.rmSync(record.backup, { force: true }); } catch { /* successful file set is already committed */ }
+    return records.map(({ path: relative, bytes, validationStatus, validationMessage }) => ({ path: relative, bytes, savedAt: now, validationStatus, validationMessage }));
+  } catch (error) {
+    if (!databaseCommitted) {
+      for (const record of [...records].reverse()) {
+        try {
+          if (record.installed) fs.rmSync(record.absolute, { force: true });
+          if (record.backedUp && fs.existsSync(record.backup)) fs.renameSync(record.backup, record.absolute);
+          fs.rmSync(record.temporary, { force: true });
+        } catch { /* keep attempting rollback for the rest of the staged files */ }
+      }
+    }
+    throw error;
+  } finally {
+    for (const record of records) {
+      try { fs.rmSync(record.temporary, { force: true }); } catch { /* best-effort temp cleanup */ }
+      if (databaseCommitted && record.backedUp) try { fs.rmSync(record.backup, { force: true }); } catch { /* best-effort backup cleanup */ }
+    }
+  }
+}
+
+export function writeProjectFile(userId: string, projectId: string, relativeInput: string, contentInput: unknown) {
+  return writeProjectFilesAtomically(userId, projectId, [{ path: relativeInput, content: String(contentInput ?? '') }])[0];
 }
 
 export function readProjectFile(userId: string, projectId: string, relativeInput: string) {

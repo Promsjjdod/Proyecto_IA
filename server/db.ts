@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS provider_models (
   favorite INTEGER NOT NULL DEFAULT 0,
   capabilities_json TEXT NOT NULL DEFAULT '{}',
   context_tokens INTEGER,
+  max_input_tokens INTEGER,
+  max_output_tokens INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE(provider_id, model_id)
@@ -270,6 +272,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at TEXT NOT NULL
 );
 `);
+
+const chatColumns = db.prepare('PRAGMA table_info(chats)').all() as { name: string }[];
+if (!chatColumns.some((column) => column.name === 'deleted_at')) db.exec('ALTER TABLE chats ADD COLUMN deleted_at TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS chats_deleted_recent_idx ON chats(user_id, deleted_at, updated_at DESC)');
+const modelColumns = db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[];
+if (!modelColumns.some((column) => column.name === 'max_input_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_input_tokens INTEGER');
+if (!modelColumns.some((column) => column.name === 'max_output_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_output_tokens INTEGER');
 
 export function createUserDefaults(userId: string) {
   const now = new Date().toISOString();

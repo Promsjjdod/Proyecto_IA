@@ -29,10 +29,18 @@ function modelDto(row: any) {
   let capabilities = {};
   try { capabilities = JSON.parse(row.capabilities_json || '{}'); } catch { /* ignore */ }
   return { id: row.model_id, displayName: row.display_name, source: row.source, status: row.status, favorite: Boolean(row.favorite),
-    capabilities, contextTokens: row.context_tokens ?? null };
+    capabilities, contextTokens: row.context_tokens ?? null, maxInputTokens: row.max_input_tokens ?? null, maxOutputTokens: row.max_output_tokens ?? null };
 }
 function validateProviderName(name: string) {
   if (name.length < 2 || name.length > 80) throw Object.assign(new Error('El nombre del proveedor debe tener entre 2 y 80 caracteres.'), { status: 400 });
+}
+function parseTokenLimit(value: unknown, label: string, minimum: number) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'number' && typeof value !== 'string') throw Object.assign(new Error(`Límite de ${label} no válido.`), { status: 400 });
+  if (typeof value === 'string' && !/^\d+$/.test(value.trim())) throw Object.assign(new Error(`Límite de ${label} no válido.`), { status: 400 });
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > 2_000_000) throw Object.assign(new Error(`Límite de ${label} no válido (debe estar entre ${minimum.toLocaleString()} y 2 000 000 tokens).`), { status: 400 });
+  return parsed;
 }
 function sanitizeAuthConfig(input: any) {
   const headerName = String(input?.headerName || 'Authorization').trim();
@@ -124,12 +132,12 @@ router.post('/:providerId/models/sync', async (req: AuthRequest, res, next) => {
     const list = await discoverModels(provider);
     if (list.length > 1000) throw Object.assign(new Error('El proveedor devolvió demasiados modelos; se limitó la sincronización.'), { status: 502 });
     const now = new Date().toISOString();
-    const upsert = db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,context_tokens,created_at,updated_at)
-      VALUES(?,?,?,?,?,'available',?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,status='available',
-      context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),source='detected',updated_at=excluded.updated_at`);
+    const upsert = db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,context_tokens,max_input_tokens,max_output_tokens,created_at,updated_at)
+      VALUES(?,?,?,?,?,'available',?,?,?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,status='available',
+      context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),max_input_tokens=COALESCE(excluded.max_input_tokens,provider_models.max_input_tokens),max_output_tokens=COALESCE(excluded.max_output_tokens,provider_models.max_output_tokens),source='detected',updated_at=excluded.updated_at`);
     const transaction = db.transaction((models: ModelSummary[]) => {
       const found = new Set(models.map((m) => m.id));
-      for (const model of models) upsert.run(crypto.randomUUID(), provider.id, model.id, model.displayName, 'detected', model.contextTokens ?? null, now, now);
+      for (const model of models) upsert.run(crypto.randomUUID(), provider.id, model.id, model.displayName, 'detected', model.contextTokens ?? null, model.maxInputTokens ?? null, model.maxOutputTokens ?? null, now, now);
       const existing = db.prepare(`SELECT model_id FROM provider_models WHERE provider_id=? AND source='detected'`).all(provider.id) as { model_id: string }[];
       const mark = db.prepare(`UPDATE provider_models SET status='unavailable',updated_at=? WHERE provider_id=? AND model_id=? AND source='detected'`);
       for (const row of existing) if (!found.has(row.model_id)) mark.run(now, provider.id, row.model_id);
@@ -148,12 +156,13 @@ router.post('/:providerId/models', (req: AuthRequest, res, next) => {
     const displayName = String(req.body?.displayName || modelId).trim();
     if (!modelId || modelId.length > 200 || /[\0\r\n]/.test(modelId)) return res.status(400).json({ error: 'Identificador de modelo no válido.' });
     if (displayName.length > 200) return res.status(400).json({ error: 'Nombre demasiado largo.' });
-    const contextTokens = req.body?.contextTokens === undefined || req.body?.contextTokens === '' ? null : Number(req.body.contextTokens);
-    if (contextTokens !== null && (!Number.isInteger(contextTokens) || contextTokens < 256 || contextTokens > 2_000_000)) return res.status(400).json({ error: 'Límite de contexto no válido.' });
+    const contextTokens = parseTokenLimit(req.body?.contextTokens, 'contexto', 256);
+    const maxInputTokens = parseTokenLimit(req.body?.maxInputTokens, 'entrada', 1);
+    const maxOutputTokens = parseTokenLimit(req.body?.maxOutputTokens, 'salida', 1);
     const now = new Date().toISOString();
-    const result = db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,capabilities_json,context_tokens,created_at,updated_at)
-      VALUES(?,?,?,?,?,'unknown','{}',?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,source='manual',status='unknown',context_tokens=excluded.context_tokens,updated_at=excluded.updated_at`)
-      .run(crypto.randomUUID(), provider.id, modelId, displayName || modelId, 'manual', contextTokens, now, now);
+    db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,capabilities_json,context_tokens,max_input_tokens,max_output_tokens,created_at,updated_at)
+      VALUES(?,?,?,?,?,'unknown','{}',?,?,?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,source='manual',status='unknown',context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),max_input_tokens=COALESCE(excluded.max_input_tokens,provider_models.max_input_tokens),max_output_tokens=COALESCE(excluded.max_output_tokens,provider_models.max_output_tokens),updated_at=excluded.updated_at`)
+      .run(crypto.randomUUID(), provider.id, modelId, displayName || modelId, 'manual', contextTokens, maxInputTokens, maxOutputTokens, now, now);
     const row = db.prepare('SELECT * FROM provider_models WHERE provider_id=? AND model_id=?').get(provider.id, modelId);
     res.status(201).json(modelDto(row));
   } catch (error) { next(error); }
@@ -175,9 +184,14 @@ router.patch('/:providerId/models/:modelId', (req: AuthRequest, res, next) => {
         capabilities[key] = value;
       }
     }
-    const favorite = req.body?.favorite === undefined ? model.favorite : Boolean(req.body.favorite);
+    if (req.body?.favorite !== undefined && typeof req.body.favorite !== 'boolean') return res.status(400).json({ error: 'El valor de favorito no es válido.' });
+    const favorite = req.body?.favorite === undefined ? model.favorite : req.body.favorite;
+    const contextTokens = req.body?.contextTokens === undefined ? model.context_tokens : parseTokenLimit(req.body.contextTokens, 'contexto', 256);
+    const maxInputTokens = req.body?.maxInputTokens === undefined ? model.max_input_tokens : parseTokenLimit(req.body.maxInputTokens, 'entrada', 1);
+    const maxOutputTokens = req.body?.maxOutputTokens === undefined ? model.max_output_tokens : parseTokenLimit(req.body.maxOutputTokens, 'salida', 1);
     const now = new Date().toISOString();
-    db.prepare('UPDATE provider_models SET favorite=?,capabilities_json=?,updated_at=? WHERE id=?').run(favorite ? 1 : 0, JSON.stringify(capabilities), now, model.id);
+    db.prepare('UPDATE provider_models SET favorite=?,capabilities_json=?,context_tokens=?,max_input_tokens=?,max_output_tokens=?,updated_at=? WHERE id=?')
+      .run(favorite ? 1 : 0, JSON.stringify(capabilities), contextTokens, maxInputTokens, maxOutputTokens, now, model.id);
     res.json(modelDto(db.prepare('SELECT * FROM provider_models WHERE id=?').get(model.id)));
   } catch (error) { next(error); }
 });
