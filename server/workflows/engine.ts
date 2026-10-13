@@ -5,7 +5,8 @@ import type { ProviderRecord, CanonicalMessage } from '../providers/types.js';
 import { estimateTextUnits, reserveUsage, releaseUsage, settleUsage } from '../usage.js';
 import type { AuthUser } from '../auth.js';
 import { cleanRelativePath, ownedProject, readProjectFile, projectFilePath, validateFileName, MAX_PROJECT_FILE_BYTES, writeProjectFilesAtomically } from '../workspaces/paths.js';
-import { budgetForMode, MODE_POLICIES, type UsageMode } from '../config.js';
+import { budgetForMode, MODE_POLICIES, normalizeUsageMode, outputLimitForRequest, TASK_TOKEN_BUDGET, type UsageMode } from '../config.js';
+import { appendContinuation, buildContinuationMessages } from '../continuation.js';
 
 export type FlowNode = { id: string; type: string; name?: string; config?: Record<string, unknown>; position?: { x: number; y: number } };
 export type FlowEdge = { source: string; target: string; sourceHandle?: string };
@@ -15,6 +16,12 @@ const MAX_NODES = 40;
 const MAX_EDGE_COUNT = 80;
 
 function json<T>(source: string, fallback: T): T { try { return JSON.parse(source) as T; } catch { return fallback; } }
+function continuationStatus(reason: unknown) {
+  const value = String(reason || '').toLowerCase().split(':').at(-1);
+  if (['length', 'max_tokens', 'max_tokens_reached', 'max_output_tokens', 'max_completion_tokens', 'token_limit_reached'].includes(value || '')) return 'incomplete';
+  if (['stop', 'end_turn', 'stop_sequence', 'message_stop', 'finished_stop', 'response'].includes(value || '')) return 'complete';
+  return 'unverified';
+}
 function validateGraph(nodes: FlowNode[], edges: FlowEdge[]) {
   if (!Array.isArray(nodes) || nodes.length < 1 || nodes.length > MAX_NODES) throw new Error(`El flujo debe tener entre 1 y ${MAX_NODES} nodos.`);
   if (!Array.isArray(edges) || edges.length > MAX_EDGE_COUNT) throw new Error(`El flujo admite hasta ${MAX_EDGE_COUNT} conexiones.`);
@@ -95,15 +102,15 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
   const pendingWrites = new Map<string, string>();
   const aiNodeSettings = new Map<string, { selected: ReturnType<typeof providerFor>; mode: UsageMode; budget: ReturnType<typeof budgetForMode> }>();
   for (const node of nodes.filter((item) => item.type === 'ai')) {
-    const nodeMode = String(node.config?.mode || 'MEDIO').toUpperCase() as UsageMode;
-    if (!(nodeMode in MODE_POLICIES)) throw Object.assign(new Error('Modo del flujo no válido.'), { status: 400 });
+    const nodeMode = normalizeUsageMode(node.config?.mode || 'MEDIO');
+    if (!nodeMode || !(nodeMode in MODE_POLICIES)) throw Object.assign(new Error('Modo del flujo no válido.'), { status: 400 });
     const selected = providerFor(user.id, node.config?.providerId, node.config?.modelId);
     const budget = budgetForMode(nodeMode, { contextTokens: selected.contextTokens, maxInputTokens: selected.maxInputTokens, maxOutputTokens: selected.maxOutputTokens });
-    if (budget.outputTokens < 1 || budget.inputContextTokens < 128) throw Object.assign(new Error(`Los límites de contexto/entrada/salida configurados para ${selected.modelId} no dejan presupuesto suficiente para el modo ${nodeMode}.`), { status: 400 });
+    if (budget.outputTokens === null || (budget.inputContextTokens !== null && budget.inputContextTokens < 1)) throw Object.assign(new Error(`No se conocen límites de salida/entrada suficientes para ${selected.modelId}. Configura los límites documentados del modelo.`), { status: 400 });
     aiNodeSettings.set(node.id, { selected, mode: nodeMode, budget });
   }
   const mode = aiNodeSettings.values().next().value?.mode || 'MEDIO';
-  const outputBudget = [...aiNodeSettings.values()].reduce((total, settings) => total + settings.budget.outputTokens, 0);
+  const outputBudget = [...aiNodeSettings.values()].reduce((total, settings) => total + Number(settings.selected.maxOutputTokens), 0);
   const inputBudget = estimateTextUnits(inputText) * Math.max(1, aiNodeSettings.size);
   const runId = crypto.randomUUID();
   const reservation = reserveUsage(user, `workflow:${runId}`, 'workflow', inputBudget, Math.max(512, outputBudget), { workflowId: workflow.id });
@@ -117,6 +124,7 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
   let systemPrompt = '';
   let lastCondition: boolean | null = null;
   let totalText = inputText;
+  let taskOutputTokens = 0;
   const startedAt = Date.now();
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort(externalSignal?.reason || new Error('Ejecución cancelada.'));
@@ -200,14 +208,43 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
             if (!settings) throw new Error('No se pudieron validar los parámetros del nodo IA.');
             const { selected, mode: nodeMode, budget: nodeBudget } = settings;
             const prompt = templated(cfg.prompt || '{{result}}', flowInputs);
-            if (estimateTextUnits(prompt) + estimateTextUnits(systemPrompt) > nodeBudget.inputContextTokens) throw new Error(`El nodo IA superó el contexto de entrada disponible (${nodeBudget.inputContextTokens} tokens estimados).`);
+            if (nodeBudget.inputContextTokens !== null && estimateTextUnits(prompt) + estimateTextUnits(systemPrompt) > nodeBudget.inputContextTokens) throw new Error(`El nodo IA superó el contexto de entrada disponible (${nodeBudget.inputContextTokens} tokens estimados).`);
             const messages: CanonicalMessage[] = [
-              ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+              { role: 'system', content: [systemPrompt, MODE_POLICIES[nodeMode].instruction].filter(Boolean).join('\n\n') },
               { role: 'user', content: prompt },
             ];
-            const result = await completeText(selected.provider, selected.modelId, messages, nodeMode, controller.signal, nodeBudget.outputTokens);
-            flowInputs.result = result.text;
-            totalText += result.text;
+            const continuationBase = [...messages];
+            let nodeText = '';
+            let round = 0;
+            let nodeComplete = false;
+            while (round < 1024 && taskOutputTokens < TASK_TOKEN_BUDGET) {
+              const inputTokens = estimateTextUnits(messages.map((message) => message.content).join('\n'));
+              const requestOutputLimit = outputLimitForRequest({
+                contextTokens: selected.contextTokens,
+                maxInputTokens: selected.maxInputTokens,
+                maxOutputTokens: selected.maxOutputTokens,
+              }, TASK_TOKEN_BUDGET - taskOutputTokens, inputTokens);
+              if (requestOutputLimit === null || requestOutputLimit < 1) throw new Error(`No se conoce un límite de salida válido o se agotó el presupuesto acumulado para ${selected.modelId}.`);
+              const result = await completeText(selected.provider, selected.modelId, messages, nodeMode, controller.signal, requestOutputLimit);
+              const status = continuationStatus(result.finishReason);
+              nodeText = appendContinuation(nodeText, result.text);
+              const outputTokens = Number(result.usage?.completion_tokens ?? result.usage?.output_tokens ?? result.usage?.candidatesTokenCount);
+              const consumed = Number.isSafeInteger(outputTokens) && outputTokens > 0 ? outputTokens : estimateTextUnits(result.text);
+              taskOutputTokens += consumed;
+              if (taskOutputTokens > TASK_TOKEN_BUDGET) throw new Error('La generación superó el presupuesto global de tokens; el resultado del flujo quedó incompleto.');
+              if (status === 'complete') { nodeComplete = true; break; }
+              if (status !== 'incomplete') throw new Error(`El proveedor no confirmó que la salida de ${selected.modelId} esté completa (${String(result.finishReason || 'sin motivo')}).`);
+              if (!result.text || consumed < 1 || round === 1023) throw new Error(`La generación de ${selected.modelId} quedó incompleta por falta de progreso o límite de continuaciones.`);
+              messages.splice(0, messages.length, ...buildContinuationMessages(
+                continuationBase, nodeText, 'Continúa exactamente después del contenido previo. No repitas nada; devuelve solo la continuación.',
+                { contextTokens: selected.contextTokens, maxInputTokens: selected.maxInputTokens, maxOutputTokens: selected.maxOutputTokens },
+                TASK_TOKEN_BUDGET - taskOutputTokens,
+              ));
+              round += 1;
+            }
+            if (!nodeComplete) throw new Error('Se agotó el presupuesto global o el límite seguro de continuaciones; el resultado del flujo quedó incompleto.');
+            flowInputs.result = nodeText;
+            totalText += nodeText;
             break;
           }
           case 'http':

@@ -1,4 +1,9 @@
-export type Mode = 'LOW' | 'MEDIO' | 'ALTO' | 'EXTRA' | 'MAX';
+export type Mode = 'LOW' | 'MEDIO' | 'HIGH' | 'MAX';
+export function normalizeMode(value: unknown): Mode {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'ALTO' || normalized === 'EXTRA') return 'HIGH';
+  return normalized === 'LOW' || normalized === 'HIGH' || normalized === 'MAX' ? normalized : 'MEDIO';
+}
 export type User = {
   id: string; email: string; name: string; role: 'admin' | 'user'; credits: number; dailyLimit: number; monthlyLimit: number;
   preferences: Record<string, any>; plan: string; createdAt: string;

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { api, setCsrfToken } from './api';
-import type { Agent, Attachment, Chat, ImageRecord, Message, Model, Mode, Project, Provider, User, Workflow } from './types';
+import { normalizeMode, type Agent, type Attachment, type Chat, type ImageRecord, type Message, type Model, type Mode, type Project, type Provider, type User, type Workflow } from './types';
 import { Sidebar, type ViewId } from './components/Sidebar';
 import { Header } from './components/Header';
 import { BrandMark } from './components/common';
@@ -52,7 +52,7 @@ export default function App() {
     api<{ user: User; csrfToken: string }>('/auth/me').then((data) => {
       if (cancelled) return;
       setCsrfToken(data.csrfToken); setUser(data.user);
-      setMode((data.user.preferences?.defaultMode as Mode) || 'MEDIO');
+      setMode(normalizeMode(data.user.preferences?.defaultMode));
       setTheme(data.user.preferences?.theme || 'dark');
       const savedProject = localStorage.getItem(`nexus-active-project-${data.user.id}`);
       setActiveProjectId(savedProject);
@@ -130,7 +130,7 @@ export default function App() {
   }, [user?.id]);
 
   const handleAuthenticated = (nextUser: User) => {
-    setUser(nextUser); setMode((nextUser.preferences?.defaultMode as Mode) || 'MEDIO'); setTheme(nextUser.preferences?.theme || 'dark'); setView('chat');
+    setUser(nextUser); setMode(normalizeMode(nextUser.preferences?.defaultMode)); setTheme(nextUser.preferences?.theme || 'dark'); setView('chat');
     setActiveProjectId(localStorage.getItem(`nexus-active-project-${nextUser.id}`));
   };
   const logout = async () => {
@@ -174,7 +174,7 @@ export default function App() {
     setView('projects');
   };
   const continueCompare = (id: string, nextProvider: string, nextModel: string) => { setActiveChatId(id); setProviderId(nextProvider); setModelId(nextModel); setView('chat'); setSelectedAgentId(''); };
-  const onAgentChange = (id: string) => { setSelectedAgentId(id); const agent = agents.find((item) => item.id === id); if (agent) { setMode(agent.mode); if (agent.providerId && agent.modelId) { setProviderId(agent.providerId); setModelId(agent.modelId); } } };
+  const onAgentChange = (id: string) => { setSelectedAgentId(id); const agent = agents.find((item) => item.id === id); if (agent) { setMode(normalizeMode(agent.mode)); if (agent.providerId && agent.modelId) { setProviderId(agent.providerId); setModelId(agent.modelId); } } };
   const onSearch = (value: string) => setChatSearch(value);
   const refreshWorkspace = () => { void refreshChats(); void refreshProjects(); void refreshAgents(); void refreshWorkflows(); };
 

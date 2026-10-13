@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type Dispatch, type KeyboardEvent, type SetStateAction } from 'react';
 import { Activity, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, CircleStop, Clipboard, Code2, Download, Eye, FilePlus2, ImagePlus, Mic, Paperclip, Pencil, Plus, RotateCcw, Sparkles, Trash2, Volume2, VolumeX, X } from 'lucide-react';
-import type { Agent, Attachment, Chat, Message, Model, Mode, Project, Provider, User } from '../types';
+import { normalizeMode, type Agent, type Attachment, type Chat, type Message, type Model, type Mode, type Project, type Provider, type User } from '../types';
 import { api, streamChat, uploadFile } from '../api';
 import { EmptyState, ErrorBanner, ProviderIcon } from './common';
 import { Markdown } from './Markdown';
@@ -54,10 +54,10 @@ export function ChatPage({ user, chats, chatId, onChatChange, messages, onMessag
   const effectiveModelId = selectedAgent?.modelId || modelId;
   const selectedProvider = providers.find((provider) => provider.id === effectiveProviderId);
   const selectedModel = (modelsByProvider[effectiveProviderId] || []).find((model) => model.id === effectiveModelId);
-  const effectiveMode = selectedAgent?.mode || mode;
+  const effectiveMode = normalizeMode(selectedAgent?.mode || mode);
   const currentChat = chats.find((chat) => chat.id === chatId);
   const currentProject = projects.find((project) => project.id === activeProjectId);
-  const modeTitle: Record<Mode, string> = { LOW: 'Respuestas ágiles y breves', MEDIO: 'Equilibrio de calidad y velocidad', ALTO: 'Más profundidad y detalle', EXTRA: 'Presupuesto ampliado para tareas complejas', MAX: 'Mejor configuración disponible para esta cuenta' };
+  const modeTitle: Record<Mode, string> = { LOW: 'Resolución directa con la longitud solicitada', MEDIO: 'Equilibrio entre planificación y verificación', HIGH: 'Análisis y planificación más profundos', MAX: 'Estrategia más exhaustiva disponible' };
 
   useEffect(() => { setAttachments([]); setDraft(''); setChatError(''); setConnectionError(''); }, [chatId]);
   useEffect(() => {
@@ -111,7 +111,6 @@ export function ChatPage({ user, chats, chatId, onChatChange, messages, onMessag
       return;
     }
     const prompt = options.continueFromMessageId ? 'Continuar la respuesta anterior.' : text || `Analiza el archivo adjunto${attachments.length > 1 ? 's' : ''} y resume lo más importante.`;
-    if (effectiveMode === 'MAX' && !window.confirm('MAX reserva hasta 6 000 unidades internas para la salida y puede usar más recursos externos. Los proveedores pueden aplicar cargos propios. ¿Continuar?')) return;
     let confirmWorkflowRuns = false;
     if (selectedAgent?.tools.includes('run_workflows')) {
       if (!window.confirm('Este agente podrá listar y ejecutar una automatización durante esta solicitud. El flujo puede llamar proveedores externos, consumir cuotas o escribir archivos dentro del proyecto autorizado. Se permitirá como máximo una ejecución. ¿Autorizar?')) return;
@@ -271,7 +270,7 @@ export function ChatPage({ user, chats, chatId, onChatChange, messages, onMessag
             <button className={`composer-icon-button ${listening ? 'active-mic' : ''}`} onClick={listening ? stopRecognition : startRecognition} title={listening ? 'Detener dictado' : 'Dictar texto (el navegador puede procesar audio externamente)'} disabled={busy}>{listening ? <AudioLines size={17} /> : <Mic size={16} />}</button>
             <span className="composer-separator" />
             <label className="agent-picker"><Sparkles size={13} /><select value={selectedAgentId} onChange={(event) => onAgentChange(event.target.value)} aria-label="Elegir agente"><option value="">Chat normal</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><ChevronDown size={12} /></label>
-            <label className="composer-mode-mobile"><select value={mode} onChange={(event) => onModeChange(event.target.value as Mode)} aria-label="Modo de respuesta"><option value="LOW">LOW</option><option value="MEDIO">MEDIO</option><option value="ALTO">ALTO</option><option value="EXTRA">EXTRA</option><option value="MAX">MAX</option></select></label>
+            <label className="composer-mode-mobile"><select value={mode} onChange={(event) => onModeChange(event.target.value as Mode)} aria-label="Modo de respuesta"><option value="LOW">LOW</option><option value="MEDIO">MEDIO</option><option value="HIGH">HIGH</option><option value="MAX">MAX</option></select></label>
           </div>
           {busy ? <button className="send-button stop-button" onClick={stop} title="Detener respuesta"><CircleStop size={17} /></button> : <button className="send-button" onClick={() => void send()} disabled={(!draft.trim() && attachments.length === 0) || uploading} title="Enviar mensaje"><ArrowUp size={17} /></button>}
         </div></div>

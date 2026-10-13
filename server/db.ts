@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import initSqlJs from 'sql.js';
 import type { Database as SqlJsDatabase, Statement as SqlJsStatement, BindParams } from 'sql.js';
-import { DB_FILE, DATA_DIR, PROJECT_DIR, UPLOAD_DIR, BUILTIN_AGENTS } from './config.js';
+import { DB_FILE, DATA_DIR, PROJECT_DIR, UPLOAD_DIR, BUILTIN_AGENTS, normalizeUsageMode } from './config.js';
 import { hashPassword } from './security.js';
 
 for (const directory of [DATA_DIR, PROJECT_DIR, UPLOAD_DIR]) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -245,6 +245,21 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   started_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS generation_checkpoints (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  message_id TEXT,
+  status TEXT NOT NULL DEFAULT 'running',
+  current_text TEXT NOT NULL DEFAULT '',
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  reason TEXT,
+  next_step TEXT,
+  files_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS usage (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -274,6 +289,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 `);
 
+const checkpointColumns = db.prepare('PRAGMA table_info(generation_checkpoints)').all() as { name: string }[];
+if (!checkpointColumns.some((column) => column.name === 'output_tokens')) db.exec('ALTER TABLE generation_checkpoints ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0');
+if (!checkpointColumns.some((column) => column.name === 'input_tokens')) db.exec('ALTER TABLE generation_checkpoints ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0');
 const chatColumns = db.prepare('PRAGMA table_info(chats)').all() as { name: string }[];
 if (!chatColumns.some((column) => column.name === 'deleted_at')) db.exec('ALTER TABLE chats ADD COLUMN deleted_at TEXT');
 db.exec('CREATE INDEX IF NOT EXISTS chats_deleted_recent_idx ON chats(user_id, deleted_at, updated_at DESC)');
@@ -291,7 +309,7 @@ export function createUserDefaults(userId: string) {
   const addAgent = db.prepare(`INSERT INTO agents(id,user_id,name,description,icon,instructions,mode,tools_json,limits_json,is_builtin,created_at,updated_at)
     VALUES(?,?,?,?,?,?,?,?,?,1,?,?)`);
   for (const agent of BUILTIN_AGENTS) {
-    addAgent.run(cryptoId(), userId, agent.name, agent.description, agent.icon, agent.prompt, agent.mode,
+    addAgent.run(cryptoId(), userId, agent.name, agent.description, agent.icon, agent.prompt, normalizeUsageMode(agent.mode) || 'MEDIO',
       JSON.stringify(agent.tools), JSON.stringify({ maxActions: 8, timeoutSeconds: 120, fileAccess: agent.tools.length > 0, imageAccess: false, audioAccess: false, memoryEnabled: false }), now, now);
   }
   return projectId;

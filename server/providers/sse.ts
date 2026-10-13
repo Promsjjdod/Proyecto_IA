@@ -14,9 +14,10 @@ function usageEvent(value: any): StreamEvent | null {
 function finishEvent(providerType: string, reason: unknown): StreamEvent | null {
   if (typeof reason !== 'string' || !reason) return null;
   const normalized = reason.toLowerCase();
-  const truncated = ['length', 'max_tokens', 'max_tokens_reached', 'max_output_tokens'].includes(normalized);
-  const complete = !truncated && ['stop', 'end_turn', 'stop_sequence', 'message_stop', 'finished_stop', 'tool_calls', 'function_call'].includes(normalized);
-  return { type: 'finish', reason: `${providerType}:${reason}`, complete, truncated };
+  const truncated = ['length', 'max_tokens', 'max_tokens_reached', 'max_output_tokens', 'max_completion_tokens', 'token_limit_reached'].includes(normalized);
+  const incompleteByStreamClosure = normalized.includes('without-finish-reason') || normalized.includes('closed-without-finish') || normalized.includes('done-without-finish');
+  const complete = !truncated && !incompleteByStreamClosure && ['stop', 'end_turn', 'stop_sequence', 'message_stop', 'finished_stop', 'tool_calls', 'tool_call', 'tool_use', 'function_call', 'response'].includes(normalized);
+  return { type: 'finish', reason: `${providerType}:${reason}`, complete, truncated: truncated || incompleteByStreamClosure };
 }
 
 function parseFrame(block: string) {
