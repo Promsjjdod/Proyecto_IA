@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, Bot, Check, CirclePlay, Clock3, Copy, GitBranch, Globe2, Layers3, ListChecks, LoaderCircle, Pause, Play, Plus, Save, Settings2, Sparkles, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
 import type { Agent, FlowEdge, FlowNode, Model, Project, Provider, Workflow } from '../types';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import { EmptyState, ErrorBanner, Modal } from './common';
 import { WorkflowCanvas } from './WorkflowCanvas';
 
@@ -94,6 +94,7 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
   const [generationError, setGenerationError] = useState('');
   const [notice, setNotice] = useState('');
   const [generationNotice, setGenerationNotice] = useState('');
+  const [partialOutput, setPartialOutput] = useState('');
   const [generationRequest, setGenerationRequest] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatorOptions, setGeneratorOptions] = useState<WorkflowGeneratorOptions | null>(null);
@@ -258,11 +259,11 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
     const writesFiles = draft.nodes.some((node) => node.type === 'write_file');
     const actions = [usesExternal ? 'enviar datos a proveedores externos' : '', writesFiles ? 'crear o reemplazar archivos del proyecto' : ''].filter(Boolean).join(' y ');
     if (actions && !window.confirm(`Este flujo puede ${actions}. ¿Autorizas esta ejecución?`)) return;
-    setBusyAction('run'); setError(''); setRun(null);
+    setBusyAction('run'); setError(''); setRun(null); setPartialOutput('');
     try {
       const result = await api<any>(`/workflows/${encodeURIComponent(draft.id)}/run`, { method: 'POST', body: JSON.stringify({ input, projectId: projectForRun || null, confirmExternalResources: usesExternal, confirmProjectWrites: writesFiles }) });
       setRun(result); setRunHistory((current) => [result, ...current].slice(0, 10));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Falló la ejecución del flujo.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Falló la ejecución del flujo.'); setPartialOutput(e instanceof ApiError ? e.partialOutput || '' : ''); }
     finally { onRefreshUsage(); setBusyAction(null); }
   };
   const generate = async (event: FormEvent) => {
@@ -274,7 +275,7 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
     }
     const providerOverride = selectedGeneratorProviderId || undefined;
     const modelOverride = selectedAlternativeModel ? modelValue : undefined;
-    setIsGenerating(true); setGenerationError(''); setGenerationNotice(''); setError('');
+    setIsGenerating(true); setGenerationError(''); setGenerationNotice(''); setError(''); setPartialOutput('');
     try {
       const result = await api<{ name: string; description: string; nodes: FlowNode[]; edges: FlowEdge[]; generatedBy: { providerId: string; providerName: string; modelId: string; modelName: string } }>('/workflows/generate', {
         method: 'POST', body: JSON.stringify({ request: generationRequest.trim(), requestId: crypto.randomUUID(), ...(providerOverride ? { providerId: providerOverride } : {}), ...(modelOverride ? { modelId: modelOverride } : {}) }),
@@ -284,7 +285,7 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
       setActiveId(null); setDraft(withWorkflowPositions(generatedDraft)); setIsUnsavedDraft(true);
       setGenerationNotice(`Borrador generado por ${result.generatedBy.providerName} · ${result.generatedBy.modelName}. Revisalo y guardalo cuando esté listo.`);
       onRefreshUsage();
-    } catch (e) { setGenerationError(e instanceof Error ? e.message : 'No se pudo generar la automatización. No se guardó ningún flujo.'); onRefreshUsage(); }
+    } catch (e) { setGenerationError(e instanceof Error ? e.message : 'No se pudo generar la automatización. No se guardó ningún flujo.'); setPartialOutput(e instanceof ApiError ? e.partialOutput || '' : ''); onRefreshUsage(); }
     finally { setIsGenerating(false); }
   };
   const selectGeneratorProvider = (providerId: string) => {
@@ -336,7 +337,7 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
           </div>}
           {generatorOptionsError && <div className="automation-provider-note automation-provider-note-warning" role="status">{generatorOptionsError}<button type="button" className="button button-quiet button-sm" onClick={onGoProviders}>Abrir proveedores</button></div>}
           {isGenerating && <div className="automation-generation-progress" role="status" aria-live="polite"><LoaderCircle size={15} className="spin" /><span>Analizando la solicitud y validando los pasos compatibles…</span><i /></div>}
-          {generationError && <ErrorBanner message={generationError} onDismiss={() => setGenerationError('')} />}
+          {generationError && <ErrorBanner message={generationError} onDismiss={() => { setGenerationError(''); setPartialOutput(''); }} />}{generationError && partialOutput && <details className="run-result"><summary>Respuesta parcial conservada (no es un borrador validado)</summary><pre>{partialOutput}</pre></details>}
           {generationNotice && <div className="automation-generation-notice" role="status" aria-live="polite"><Check size={14} />{generationNotice}</div>}
         </form>
       </section>
@@ -354,7 +355,7 @@ export function AutomationPage({ workflows, providers, modelsByProvider, agents,
       </div></div>
       {isUnsavedDraft && <div className="automation-draft-warning"><Sparkles size={14} /><span>Este es un borrador generado por IA; todavía no se guardó en tu cuenta. Revisalo antes de guardarlo.</span></div>}
       {!enabled(draft) && <div className="automation-paused-banner"><Pause size={14} /><span>Automatización pausada. No se aceptan nuevas ejecuciones; las ya iniciadas no se interrumpen.</span></div>}
-      {error && <ErrorBanner message={error} onDismiss={() => setError('')} />}{notice && <div className="success-banner automation-feedback-enter"><Check size={15} />{notice}<button className="icon-button" onClick={() => setNotice('')}>×</button></div>}
+      {error && <ErrorBanner message={error} onDismiss={() => { setError(''); setPartialOutput(''); }} />}{error && partialOutput && <details className="run-result"><summary>Salida parcial conservada</summary><pre>{partialOutput}</pre></details>}{notice && <div className="success-banner automation-feedback-enter"><Check size={15} />{notice}<button className="icon-button" onClick={() => setNotice('')}>×</button></div>}
       <div className="flow-editor-layout automation-editor-enter"><main className="flow-canvas"><div className="flow-canvas-header"><div><span className="section-kicker">EDITOR VISUAL</span><h2>{draft.description || 'Diseña tu flujo'}</h2></div><label className="flow-description-edit"><span>DESCRIPCIÓN</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Qué hace esta automatización" /></label></div>
         <WorkflowCanvas workflow={draft} providers={providers} modelsByProvider={modelsByProvider} agents={agents} onMoveNode={moveNode} onPatchNode={patchNode} onConnect={connectNode} onDisconnect={disconnectNode} onDeleteNode={setNodeToDelete} onAddNode={() => setShowNodePicker(true)} />
       </main>

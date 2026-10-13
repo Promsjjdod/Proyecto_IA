@@ -57,7 +57,7 @@ export function createApp() {
     const raw = error instanceof Error ? error.message : 'Error interno del servidor.';
     const message = safeStatus >= 500 && !error?.status ? 'Error interno del servidor. Revisa la configuración e inténtalo de nuevo.' : raw;
     if (safeStatus >= 500) console.error(`[server] ${safeStatus}: ${raw.slice(0, 350)}`);
-    res.status(safeStatus).json({ error: message });
+    res.status(safeStatus).json({ error: message, ...(typeof error?.partialOutput === 'string' ? { partialOutput: error.partialOutput } : {}) });
   });
   return app;
 }

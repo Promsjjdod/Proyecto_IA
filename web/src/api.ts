@@ -3,7 +3,8 @@ export function setCsrfToken(value: string) { csrfToken = value; }
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) { super(message); this.name = 'ApiError'; this.status = status; }
+  partialOutput?: string;
+  constructor(message: string, status: number, partialOutput?: string) { super(message); this.name = 'ApiError'; this.status = status; this.partialOutput = partialOutput; }
 }
 
 export async function api<T = any>(path: string, init: RequestInit = {}): Promise<T> {
@@ -17,7 +18,7 @@ export async function api<T = any>(path: string, init: RequestInit = {}): Promis
   const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
   if (!response.ok) {
     const message = typeof payload === 'string' ? payload : payload?.error || payload?.message || `Error ${response.status}`;
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, typeof payload?.partialOutput === 'string' ? payload.partialOutput : undefined);
   }
   return payload as T;
 }
@@ -48,7 +49,7 @@ export async function streamChat(chatId: string, payload: Record<string, unknown
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new ApiError(data?.error || `Error ${response.status}`, response.status);
+    throw new ApiError(data?.error || `Error ${response.status}`, response.status, typeof data?.partialOutput === 'string' ? data.partialOutput : undefined);
   }
   if (!response.body) throw new Error('El navegador no permite leer la respuesta en streaming.');
   const reader = response.body.getReader();

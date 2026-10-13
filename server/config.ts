@@ -71,7 +71,6 @@ export function budgetForMode(_mode: UsageMode, limits: ModelTokenLimits = {}) {
 
 export function outputLimitForRequest(limits: ModelTokenLimits, remainingTaskTokens: number, estimatedInputTokens: number) {
   const modelLimit = positiveTokenLimit(limits.maxOutputTokens);
-  if (modelLimit === null) return null;
   const remaining = positiveTokenLimit(remainingTaskTokens);
   if (remaining === null) return 0;
   const input = Math.max(0, estimatedInputTokens);
@@ -79,6 +78,8 @@ export function outputLimitForRequest(limits: ModelTokenLimits, remainingTaskTok
   if (maxInput !== null && input > maxInput) return 0;
   const context = positiveTokenLimit(limits.contextTokens);
   const contextRemaining = context === null ? Number.POSITIVE_INFINITY : Math.max(0, context - input);
+  if (contextRemaining < 1) return 0;
+  if (modelLimit === null) return null;
   return Math.max(0, Math.min(modelLimit, remaining, contextRemaining));
 }
 

@@ -74,6 +74,8 @@ test('credential encryption, provider allowlists, and DNS-pinned requests', asyn
   assert.equal(outputLimitForRequest({ maxInputTokens: 16_000, maxOutputTokens: 8_192 }, 1_000_000, 16_000), 8_192);
   assert.equal(outputLimitForRequest({ maxOutputTokens: 8_192 }, 3_000, 12_000), 3_000);
   assert.equal(outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: null }, 1_000_000, 12_000), null);
+  assert.equal(outputLimitForRequest({ maxOutputTokens: null }, 1_000_000, 12_000), null);
+  assert.equal(outputLimitForRequest({ maxOutputTokens: null, maxInputTokens: 10_000 }, 1_000_000, 12_000), 0);
   assert.deepEqual(resolveModelOutputLimit(4096, 2048), { maxOutputTokens: 4096, source: 'provider-metadata' });
   assert.deepEqual(resolveModelOutputLimit(null, 2048), { maxOutputTokens: 2048, source: 'user-configured' });
   assert.deepEqual(resolveModelOutputLimit(null, null), { maxOutputTokens: null, source: 'unknown' });
@@ -87,6 +89,9 @@ test('credential encryption, provider allowlists, and DNS-pinned requests', asyn
   assert.deepEqual(outputTokenLimitFields('openai-compatible', 3_072), { max_tokens: 3_072 });
   assert.deepEqual(outputTokenLimitFields('ollama', 1_024), { max_tokens: 1_024 });
   assert.deepEqual(outputTokenLimitFields('openai', undefined), {});
+  for (const providerType of ['openai', 'anthropic', 'google', 'deepseek', 'ollama', 'openai-compatible', 'custom']) {
+    assert.deepEqual(outputTokenLimitFields(providerType), {}, `${providerType} must omit an unknown output limit instead of inventing one`);
+  }
   assert.equal(normalizeUsageMode('ALTO'), 'HIGH');
   assert.equal(normalizeUsageMode('EXTRA'), 'HIGH');
   assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'max_input_tokens'));
@@ -193,11 +198,16 @@ test('token-limit reasons and large task budgets are handled without duplicating
 
 test('provider adapters send the model-specific output-token ceiling upstream', async (t) => {
   const requestBodies: any[] = [];
+  let rejectWithRateLimit = false;
   const server = http.createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
     request.on('end', () => {
       requestBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      if (rejectWithRateLimit) {
+        response.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'account-specific rate limit exceeded' } }));
+        return;
+      }
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
       response.end('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
     });
@@ -217,6 +227,10 @@ test('provider adapters send the model-specific output-token ceiling upstream', 
     assert.equal((events.find((event) => event.type === 'finish') as any)?.complete, true);
   }
   assert.deepEqual(requestBodies.map((body) => body.max_tokens), modes.map(() => 1024));
+  rejectWithRateLimit = true;
+  await assert.rejects((async () => {
+    for await (const _event of streamCompletion(provider, 'mock-model', [{ role: 'user', content: 'retry me' }], 'MEDIO')) void _event;
+  })(), /account-specific rate limit exceeded/i);
 });
 
 test('chat integration continues long output across requests without duplication and preserves partial output on failure', async (t) => {
@@ -338,6 +352,15 @@ test('chat integration continues long output across requests without duplication
     assert.equal(allSuccessfulCalls.length, 8, 'each of LOW, MEDIO, HIGH, and MAX completes through two requests');
     assert.deepEqual(allSuccessfulCalls.map((call) => call.body.max_tokens), allSuccessfulCalls.map(() => 4096));
 
+    db.prepare('UPDATE provider_models SET max_output_tokens=NULL,configured_max_output_tokens=NULL WHERE provider_id=? AND model_id=?').run(providerId, modelId);
+    const unknownLimitChatId = createChat();
+    const unknownLimit = await collectedFor(unknownLimitChatId, 'MAX');
+    const unknownLimitCalls = calls.filter((call) => call.scenario === 'complete').slice(-2);
+    assert.equal(unknownLimit.done.completionStatus, 'complete');
+    assert.equal(unknownLimit.html, expectedHtml);
+    assert.equal(unknownLimitCalls.length, 2);
+    assert.ok(unknownLimitCalls.every((call) => !Object.hasOwn(call.body, 'max_tokens')), 'unknown provider limit must rely on the API default');
+
     scenario = 'multi';
     const multiChatId = createChat();
     const multi = await collectedFor(multiChatId);
@@ -456,7 +479,7 @@ test('orphaned attachments are retained while referenced, then removed with thei
   assert.equal(fs.existsSync(path.join(attachmentDir, `${attachmentId}.bin`)), false);
 });
 
-test('workflow graph validates cycles and executes persisted transforms with internal quotas', async () => {
+test('workflow graph validates cycles and executes persisted transforms with internal quotas', async (t) => {
   const user = insertTestUser('workflow@nexus.test');
   const projectId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -510,6 +533,65 @@ test('workflow graph validates cycles and executes persisted transforms with int
   const branchResult = await executeWorkflow(user, branchWorkflow, 'Yes');
   assert.equal(branchResult.output.text, 'YES');
   assert.equal(branchResult.logs.find((log) => log.nodeId === 'branch-false-tail')?.status, 'skipped');
+
+  const workflowRequests: any[] = [];
+  let failWorkflowContinuation = false;
+  const workflowProviderServer = http.createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    request.on('end', () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      workflowRequests.push(body);
+      const continuation = body.messages.some((message: any) => message.role === 'user' && message.content.includes('Continúa exactamente después'));
+      if (continuation && failWorkflowContinuation) {
+        response.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'simulated workflow run continuation failure' } }));
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+        choices: [{ message: { content: continuation ? 'Fragmento A y B' : 'Fragmento A' }, finish_reason: continuation ? 'stop' : 'length' }],
+        usage: { prompt_tokens: 40, completion_tokens: 12 },
+      }));
+    });
+  });
+  const workflowProviderPort = await listen(workflowProviderServer, '::');
+  t.after(() => close(workflowProviderServer));
+  const previousWorkflowAllowlist = process.env.OLLAMA_ALLOWED_URLS;
+  process.env.OLLAMA_ALLOWED_URLS = `http://localhost:${workflowProviderPort}`;
+  t.after(() => { process.env.OLLAMA_ALLOWED_URLS = previousWorkflowAllowlist || 'http://localhost:11434,http://127.0.0.1:11434,http://[::1]:11434'; });
+  const workflowProviderId = crypto.randomUUID();
+  const workflowModelId = 'unknown-output-workflow-model';
+  db.prepare('INSERT INTO providers(id,user_id,type,name,base_url,secret_encrypted,auth_config_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+    .run(workflowProviderId, user.id, 'ollama', 'Unknown-output workflow mock', `http://localhost:${workflowProviderPort}/v1`, '', '{}', 'connected', now, now);
+  db.prepare('INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,context_tokens,max_input_tokens,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+    .run(crypto.randomUUID(), workflowProviderId, workflowModelId, workflowModelId, 'manual', 'ready', 8192, 6144, now, now);
+  const aiNodes = [
+    { id: 'ai-start', type: 'start', config: {} },
+    { id: 'ai-input', type: 'input', config: {} },
+    { id: 'ai-work', type: 'ai', config: { providerId: workflowProviderId, modelId: workflowModelId, mode: 'MAX', prompt: '{{result}}' } },
+    { id: 'ai-output', type: 'output', config: {} },
+  ];
+  const aiEdges = [{ source: 'ai-start', target: 'ai-input' }, { source: 'ai-input', target: 'ai-work' }, { source: 'ai-work', target: 'ai-output' }];
+  const aiWorkflowId = crypto.randomUUID();
+  db.prepare('INSERT INTO workflows(id,user_id,name,description,nodes_json,edges_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
+    .run(aiWorkflowId, user.id, 'Unknown output AI', '', JSON.stringify(aiNodes), JSON.stringify(aiEdges), now, now);
+  const aiWorkflow = db.prepare('SELECT * FROM workflows WHERE id=?').get(aiWorkflowId) as any;
+  const aiResult = await executeWorkflow(user, aiWorkflow, 'Complete this task');
+  assert.equal(aiResult.status, 'complete');
+  assert.equal(aiResult.output.text, 'Fragmento A y B');
+  assert.equal(workflowRequests.length, 2);
+  assert.ok(workflowRequests.every((body) => !Object.hasOwn(body, 'max_tokens')));
+
+  failWorkflowContinuation = true;
+  await assert.rejects(executeWorkflow(user, aiWorkflow, 'Preserve partial result'), (error: any) => {
+    assert.equal(error.status, 502);
+    assert.match(error.message, /simulated workflow run continuation failure/i);
+    assert.equal(error.partialOutput, 'Fragmento A');
+    return true;
+  });
+  const failedWorkflowRun = db.prepare("SELECT output_json,status FROM workflow_runs WHERE workflow_id=? AND status='failed' ORDER BY started_at DESC LIMIT 1").get(aiWorkflowId) as any;
+  assert.equal(failedWorkflowRun.status, 'failed');
+  assert.equal(JSON.parse(failedWorkflowRun.output_json).text, 'Fragmento A');
+
   await assert.rejects(executeWorkflow(user, { id: crypto.randomUUID(), user_id: user.id, nodes_json: JSON.stringify([{ id: 'write', type: 'write_file', config: { path: 'new.txt', content: 'hello' } }]), edges_json: '[]' }, 'input', projectId), /Confirma que este flujo puede escribir archivos/i);
   const invalidWriteNodes = [
     { id: 'write-start', type: 'start', config: {} },
@@ -563,14 +645,25 @@ test('workflow generator follows provider order, uses adapters, validates plans,
     edges: [{ source: 'start', target: 'input' }, { source: 'input', target: 'ai' }, { source: 'ai', target: 'output' }],
   };
   let responseText = JSON.stringify(plan);
+  let continuationChunks: string[] | null = null;
+  let continuationIndex = 0;
+  let failContinuation = false;
   const requestBodies: any[] = [];
   const server = http.createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
     request.on('end', () => {
-      requestBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      requestBodies.push(body);
+      const continuing = body.messages.some((message: any) => message.role === 'assistant');
+      if (continuationChunks && continuing && failContinuation) {
+        response.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'simulated workflow continuation failure' } }));
+        return;
+      }
+      const chunkIndex = continuationChunks ? continuationIndex++ : -1;
+      const content = chunkIndex >= 0 ? continuationChunks![chunkIndex] : responseText;
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ choices: [{ message: { content: responseText }, finish_reason: 'stop' }], usage: { prompt_tokens: 121, completion_tokens: 47 } }));
+      response.end(JSON.stringify({ choices: [{ message: { content }, finish_reason: chunkIndex === 0 ? 'length' : 'stop' }], usage: { prompt_tokens: 121, completion_tokens: 47 } }));
     });
   });
   const port = await listen(server, '::');
@@ -609,11 +702,37 @@ test('workflow generator follows provider order, uses adapters, validates plans,
   assert.equal(generated.usage.estimated, false);
   assert.equal((db.prepare('SELECT COUNT(*) AS count FROM workflows WHERE user_id=?').get(user.id) as any).count, 0);
 
+  db.prepare('UPDATE provider_models SET max_output_tokens=NULL,configured_max_output_tokens=NULL WHERE provider_id=? AND model_id=?').run(middle.providerId, middle.modelId);
+  const completePlanText = JSON.stringify(plan);
+  const planSplit = Math.floor(completePlanText.length / 2);
+  continuationChunks = [completePlanText.slice(0, planSplit), completePlanText.slice(planSplit)];
+  continuationIndex = 0;
+  const unknownLimitStart = requestBodies.length;
+  const generatedWithUnknownLimit = await generateWorkflowDraft(user, 'Procesá el texto de entrada y devolvé el resultado.', middle.providerId, middle.modelId, crypto.randomUUID());
+  const unknownLimitRequests = requestBodies.slice(unknownLimitStart);
+  assert.equal(generatedWithUnknownLimit.nodes.length, plan.nodes.length);
+  assert.equal(unknownLimitRequests.length, 2);
+  assert.ok(unknownLimitRequests.every((body) => !Object.hasOwn(body, 'max_tokens')));
+  assert.equal(unknownLimitRequests[1].messages.some((message: any) => message.role === 'assistant' && message.content === continuationChunks![0]), true);
+  assert.equal((db.prepare('SELECT COUNT(*) AS count FROM workflows WHERE user_id=?').get(user.id) as any).count, 0);
+
+  continuationIndex = 0;
+  failContinuation = true;
+  const partialText = continuationChunks[0];
+  await assert.rejects(generateWorkflowDraft(user, 'Procesá el texto de entrada y devolvé el resultado.', middle.providerId, middle.modelId, crypto.randomUUID()), (error: any) => {
+    assert.equal(error.status, 502);
+    assert.match(error.message, /simulated workflow continuation failure/i);
+    assert.equal(error.partialOutput, partialText);
+    return true;
+  });
+  failContinuation = false;
+  continuationChunks = null;
+
   responseText = JSON.stringify({ ...plan, edges: [...plan.edges, { source: 'output', target: 'start' }] });
   await assert.rejects(generateWorkflowDraft(user, 'Procesá el texto de entrada y devolvé el resultado.', alpha.providerId, alpha.modelId, crypto.randomUUID()), (error: any) => error.status === 422 && error.code === 'INVALID_GENERATED_WORKFLOW');
   assert.equal(requestBodies.at(-1)?.model, alpha.modelId);
   assert.equal((db.prepare('SELECT COUNT(*) AS count FROM workflows WHERE user_id=?').get(user.id) as any).count, 0);
-  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM usage WHERE user_id=? AND operation='workflow-generator' AND status='complete'").get(user.id) as any).count, 2);
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM usage WHERE user_id=? AND operation='workflow-generator' AND status='complete'").get(user.id) as any).count, 3);
 });
 
 test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles', async (t) => {

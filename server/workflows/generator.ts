@@ -298,7 +298,7 @@ export async function generateWorkflowDraft(user: AuthUser, requestText: string,
   if (runningGeneration.has(user.id)) throw fail('Ya se está generando una automatización para esta cuenta.', 429, 'GENERATION_IN_PROGRESS');
   const selected = chooseGenerator(user.id, requestedProviderId, requestedModelId);
   const budget = budgetForMode(USAGE_MODE, { contextTokens: selected.contextTokens, maxInputTokens: selected.maxInputTokens, maxOutputTokens: selected.maxOutputTokens });
-  if (budget.outputTokens === null || (budget.inputContextTokens !== null && budget.inputContextTokens < 1)) throw fail('No se conocen límites suficientes para este modelo. Configurá los límites documentados en Proveedores.', 409, 'MODEL_BUDGET_TOO_SMALL');
+  if (budget.inputContextTokens !== null && budget.inputContextTokens < 1) throw fail('El límite de entrada configurado para este modelo no deja espacio para el contexto.', 409, 'MODEL_BUDGET_TOO_SMALL');
   const messages: CanonicalMessage[] = [
     { role: 'system', content: `${MODE_POLICIES[USAGE_MODE].instruction}\n\n${systemPrompt(allowedHttpHosts())}` },
     { role: 'user', content: `Solicitud del usuario:\n${request}` },
@@ -309,15 +309,15 @@ export async function generateWorkflowDraft(user: AuthUser, requestText: string,
   const idempotency = String(requestId || crypto.randomUUID());
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(idempotency)) throw fail('Identificador de generación no válido.', 400, 'INVALID_REQUEST_ID');
   const outputLimit = outputLimitForRequest(selected, TASK_TOKEN_BUDGET, estimateTextUnits(promptText));
-  if (outputLimit === null || outputLimit < 1) throw fail('No se conoce el máximo de salida documentado para este modelo.', 409, 'MODEL_OUTPUT_LIMIT_UNKNOWN');
-  const reservation = reserveUsage(user, `workflow-generator:${idempotency}`, 'workflow-generator', estimateTextUnits(promptText), outputLimit, { providerId: selected.providerId, modelId: selected.modelId, mode: USAGE_MODE });
+  if (outputLimit === 0) throw fail('El contexto disponible no deja espacio para generar una respuesta.', 409, 'MODEL_BUDGET_TOO_SMALL');
+  const reservation = reserveUsage(user, `workflow-generator:${idempotency}`, 'workflow-generator', estimateTextUnits(promptText), outputLimit ?? 0, { providerId: selected.providerId, modelId: selected.modelId, mode: USAGE_MODE });
   runningGeneration.add(user.id);
   let settled = false;
+  let generatedText = '';
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('La generación superó el límite de tiempo.')), 90_000);
     timer.unref();
-    let generatedText = '';
     let outputTokens = 0;
     let inputTokens = 0;
     let estimated = false;
@@ -328,8 +328,8 @@ export async function generateWorkflowDraft(user: AuthUser, requestText: string,
         const currentPrompt = messages.map((message) => message.content).join('\n\n');
         const remaining = TASK_TOKEN_BUDGET - outputTokens;
         const requestLimit = outputLimitForRequest(selected, remaining, estimateTextUnits(currentPrompt));
-        if (requestLimit === null || requestLimit < 1) throw fail('Se agotó el presupuesto disponible o el contexto del modelo antes de completar el borrador.', 422, 'INCOMPLETE_GENERATION');
-        const result = await completeText(selected.provider, selected.modelId, messages, USAGE_MODE, controller.signal, requestLimit, selected.outputTokenParameter);
+        if (requestLimit === 0) throw fail('Se agotó el presupuesto disponible o el contexto del modelo antes de completar el borrador.', 422, 'INCOMPLETE_GENERATION');
+        const result = await completeText(selected.provider, selected.modelId, messages, USAGE_MODE, controller.signal, requestLimit ?? undefined, selected.outputTokenParameter);
         finalReason = result.finishReason;
         generatedText = appendContinuation(generatedText, result.text);
         const usage = providerUsage(result, currentPrompt);
@@ -348,8 +348,10 @@ export async function generateWorkflowDraft(user: AuthUser, requestText: string,
         ));
       }
     } catch (error) {
+      if (generatedText && error instanceof Error) Object.assign(error, { partialOutput: generatedText });
       if ((error as any)?.code) throw error;
-      throw fail(error instanceof Error ? error.message : 'No se pudo contactar con el proveedor seleccionado.', 502, 'GENERATOR_PROVIDER_ERROR');
+      throw Object.assign(fail(error instanceof Error ? error.message : 'No se pudo contactar con el proveedor seleccionado.', 502, 'GENERATOR_PROVIDER_ERROR'),
+        generatedText ? { partialOutput: generatedText } : {});
     } finally { clearTimeout(timer); }
     if (!completed) throw fail(finalReason ? `El borrador quedó incompleto (${String(finalReason)}); no se guardó.` : 'Se agotó el presupuesto global del borrador; no se guardó.', 422, 'INCOMPLETE_GENERATION');
 
@@ -363,6 +365,7 @@ export async function generateWorkflowDraft(user: AuthUser, requestText: string,
       usage: { inputTokens: usage.input, outputTokens: usage.output, estimated: usage.estimated },
     };
   } catch (error) {
+    if (generatedText && error instanceof Error && !('partialOutput' in error)) Object.assign(error, { partialOutput: generatedText });
     if (!settled) releaseUsage(user.id, reservation, 'failed', { operation: 'workflow-generation', error: error instanceof Error ? error.message : 'Error desconocido.' });
     throw error;
   } finally {

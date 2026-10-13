@@ -430,7 +430,6 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
     const modelOutput = resolveModelOutputLimit(model.max_output_tokens, model.configured_max_output_tokens);
     const modelLimits = { contextTokens: model.context_tokens, maxInputTokens: model.max_input_tokens, maxOutputTokens: modelOutput.maxOutputTokens };
     const modeBudget = budgetForMode(mode, modelLimits);
-    if (modeBudget.outputTokens === null) return res.status(400).json({ error: `No se conoce el máximo de salida de ${modelId}. Configura el límite documentado en Proveedores → Modelos; Nexus no inventará uno.` });
     if (modeBudget.inputContextTokens !== null && modeBudget.inputContextTokens < 1) return res.status(400).json({ error: `El límite de entrada configurado para ${modelId} no deja espacio para el contexto. Revísalo en Proveedores → Modelos.` });
     const projectId = req.body?.projectId === undefined ? chat.project_id : (req.body.projectId ? String(req.body.projectId) : null);
     responseProjectId = projectId || null;
@@ -513,9 +512,8 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
     };
     updateGenerationCheckpoint({ userId: req.user!.id, chatId: chat.id, status: 'running', currentText: accumulated, inputTokens: providerUsage.inputTokens, outputTokens: taskOutputTokens, reason: finishReason || null, nextStep: 'prerendering', files: [] });
     const initialOutputLimit = outputLimitForRequest(modelLimits, remainingTaskTokenBudget(alreadyGeneratedTokens, taskTokenBudget), inputEstimate);
-    if (initialOutputLimit === null) return res.status(400).json({ error: `No se conoce el máximo de salida de ${modelId}. Configura el límite documentado en Proveedores → Modelos.` });
-    if (initialOutputLimit < 1) return res.status(400).json({ error: 'El contexto de entrada y el presupuesto restante no dejan tokens disponibles para generar otra solicitud.' });
-    reservation = reserveUsage(req.user!, requestId, 'chat', inputEstimate, initialOutputLimit, { providerId, modelId, mode, chatId: chat.id });
+    if (initialOutputLimit !== null && initialOutputLimit < 1) return res.status(400).json({ error: 'El contexto de entrada y el presupuesto restante no dejan tokens disponibles para generar otra solicitud.' });
+    reservation = reserveUsage(req.user!, requestId, 'chat', inputEstimate, initialOutputLimit ?? 0, { providerId, modelId, mode, chatId: chat.id });
     if (!existingMessageId) {
       const now = new Date().toISOString();
       const messageId = crypto.randomUUID();
@@ -550,9 +548,8 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
         remainingTaskTokenBudget(taskOutputTokens, taskTokenBudget),
         estimateTextUnits(requestMessages.map((message) => message.content).join('\n')) + attachmentData.images.length * 750,
       );
-      if (limit === null) throw new Error(`No se conoce el máximo de salida documentado para ${modelId}.`);
-      if (limit < 1) throw new Error('Se agotó el presupuesto global de tokens o el contexto restante del modelo.');
-      return limit;
+      if (limit !== null && limit < 1) throw new Error('Se agotó el presupuesto global de tokens o el contexto restante del modelo.');
+      return limit ?? undefined;
     };
     const recordRequestUsage = (usage: any, text: string, prompt: string) => {
       const normalized = normalizeProviderUsage(usage);
@@ -678,12 +675,7 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
           remainingTaskTokenBudget(taskOutputTokens, taskTokenBudget),
           requestInputEstimate,
         );
-        if (requestOutputLimit === null) {
-          completionStatus = 'incomplete';
-          finishReason = 'provider-output-limit-unknown';
-          break;
-        }
-        if (requestOutputLimit < 1) {
+        if (requestOutputLimit !== null && requestOutputLimit < 1) {
           completionStatus = 'incomplete';
           finishReason = taskOutputTokens >= taskTokenBudget ? 'task-token-budget-exhausted' : 'model-context-exhausted';
           break;
@@ -692,7 +684,7 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
         let requestInputTokens: number | undefined;
         let requestText = '';
         const textBeforeRequest = accumulated;
-        for await (const chunk of streamCompletion(provider, modelId, messages, mode, controller.signal, requestOutputLimit, model.output_token_parameter)) {
+        for await (const chunk of streamCompletion(provider, modelId, messages, mode, controller.signal, requestOutputLimit ?? undefined, model.output_token_parameter)) {
           if (cancelled) throw Object.assign(new Error('Generación cancelada por el usuario.'), { cancelled: true });
           if (chunk.type === 'delta') {
             requestText += chunk.text;

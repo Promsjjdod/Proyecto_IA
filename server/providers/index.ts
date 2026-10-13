@@ -31,10 +31,10 @@ function endpoint(provider: ProviderRecord, suffix: string) { return new URL(`${
 function providerMessage(provider: ProviderRecord, message: string) {
   const secret = secretOf(provider);
   const cleaned = redactedError(message, secret);
-  if (/401|unauthorized|invalid.*key|invalid api key/i.test(cleaned)) return 'Credenciales rechazadas. Revisa la clave y los permisos del proveedor.';
-  if (/403|forbidden|permission/i.test(cleaned)) return 'El proveedor denegó el acceso. Comprueba los permisos de la cuenta y del modelo.';
-  if (/429|rate.?limit|quota|resource exhausted/i.test(cleaned)) return 'El proveedor alcanzó un límite de solicitudes o cuota. Espera un momento o revisa tu cuenta externa.';
-  if (/404|not found/i.test(cleaned)) return 'Endpoint o modelo no encontrado. Comprueba la URL base y el identificador exacto del modelo.';
+  if (/401|unauthorized|invalid.*key|invalid api key/i.test(cleaned)) return `Credenciales rechazadas. Revisa la clave y los permisos del proveedor. Respuesta: ${cleaned}`;
+  if (/403|forbidden|permission/i.test(cleaned)) return `El proveedor denegó el acceso. Comprueba los permisos de la cuenta y del modelo. Respuesta: ${cleaned}`;
+  if (/429|rate.?limit|quota|resource exhausted/i.test(cleaned)) return `El proveedor alcanzó un límite de solicitudes o cuota. Respuesta: ${cleaned}`;
+  if (/404|not found/i.test(cleaned)) return `Endpoint o modelo no encontrado. Comprueba la URL base y el identificador exacto del modelo. Respuesta: ${cleaned}`;
   return cleaned || `Error al comunicarse con ${provider.name}.`;
 }
 
@@ -183,7 +183,6 @@ export async function* streamCompletion(provider: ProviderRecord, model: string,
       url = googleUrl(provider, `/models/${encodeURIComponent(modelIdForGoogle(model))}:streamGenerateContent?alt=sse`);
       body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     } else if (provider.type === 'anthropic') {
-      if (!maxOutputTokens) throw new Error('Anthropic requiere max_tokens; configura el máximo de salida real del modelo antes de generar.');
       const prepared = prepareAnthropicMessages(messages);
       url = endpoint(provider, '/messages');
       body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages, stream: true };
@@ -215,7 +214,6 @@ export async function completeText(provider: ProviderRecord, model: string, mess
       url = googleUrl(provider, `/models/${encodeURIComponent(modelIdForGoogle(model))}:generateContent`);
       body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     } else if (provider.type === 'anthropic') {
-      if (!maxOutputTokens) throw new Error('Anthropic requiere max_tokens; configura el máximo de salida real del modelo antes de generar.');
       const prepared = prepareAnthropicMessages(messages);
       url = endpoint(provider, '/messages');
       body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages };
@@ -245,7 +243,6 @@ export async function completeWithTools(provider: ProviderRecord, model: string,
     let url: URL;
     let body: unknown;
     if (provider.type === 'anthropic') {
-      if (!maxOutputTokens) throw new Error('Anthropic requiere max_tokens; configura el máximo de salida real del modelo antes de generar.');
       const prepared = prepareAnthropicMessages(messages);
       url = endpoint(provider, '/messages');
       body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages,

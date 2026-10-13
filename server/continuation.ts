@@ -36,7 +36,7 @@ export function buildContinuationMessages(
   const maxInputTokens = positiveLimit(limits.maxInputTokens);
   const maxOutputTokens = positiveLimit(limits.maxOutputTokens);
   const outputBudget = Math.max(0, Math.floor(remainingTaskTokens));
-  const requestOutputLimit = maxOutputTokens === null ? outputBudget : Math.min(maxOutputTokens, outputBudget);
+  const requestOutputLimit = maxOutputTokens === null ? 0 : Math.min(maxOutputTokens, outputBudget);
   const contextInputLimit = contextTokens === null ? Number.POSITIVE_INFINITY : Math.max(0, contextTokens - requestOutputLimit);
   const inputLimit = Math.min(maxInputTokens ?? Number.POSITIVE_INFINITY, contextInputLimit);
   const fixedInputTokens = estimateTextUnits(baseMessages.map((message) => message.content).join('\n'))

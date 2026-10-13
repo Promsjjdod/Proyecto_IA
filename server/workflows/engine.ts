@@ -107,14 +107,14 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
     if (!nodeMode || !(nodeMode in MODE_POLICIES)) throw Object.assign(new Error('Modo del flujo no válido.'), { status: 400 });
     const selected = providerFor(user.id, node.config?.providerId, node.config?.modelId);
     const budget = budgetForMode(nodeMode, { contextTokens: selected.contextTokens, maxInputTokens: selected.maxInputTokens, maxOutputTokens: selected.maxOutputTokens });
-    if (budget.outputTokens === null || (budget.inputContextTokens !== null && budget.inputContextTokens < 1)) throw Object.assign(new Error(`No se conocen límites de salida/entrada suficientes para ${selected.modelId}. Configura los límites documentados del modelo.`), { status: 400 });
+    if (budget.inputContextTokens !== null && budget.inputContextTokens < 1) throw Object.assign(new Error(`El límite de entrada configurado para ${selected.modelId} no deja espacio para el contexto.`), { status: 400 });
     aiNodeSettings.set(node.id, { selected, mode: nodeMode, budget });
   }
   const mode = aiNodeSettings.values().next().value?.mode || 'MEDIO';
-  const outputBudget = [...aiNodeSettings.values()].reduce((total, settings) => total + Number(settings.selected.maxOutputTokens), 0);
+  const outputBudget = [...aiNodeSettings.values()].reduce((total, settings) => total + Number(settings.selected.maxOutputTokens || 0), 0);
   const inputBudget = estimateTextUnits(inputText) * Math.max(1, aiNodeSettings.size);
   const runId = crypto.randomUUID();
-  const reservation = reserveUsage(user, `workflow:${runId}`, 'workflow', inputBudget, Math.max(512, outputBudget), { workflowId: workflow.id });
+  const reservation = reserveUsage(user, `workflow:${runId}`, 'workflow', inputBudget, outputBudget, { workflowId: workflow.id });
   const now = new Date().toISOString();
   db.prepare(`INSERT INTO workflow_runs(id,workflow_id,user_id,status,input_json,started_at) VALUES(?,?,?,'running',?,?)`)
     .run(runId, workflow.id, user.id, JSON.stringify({ input: inputText.slice(0, 3000), projectId: projectId || null }), now);
@@ -225,13 +225,20 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
                 maxInputTokens: selected.maxInputTokens,
                 maxOutputTokens: selected.maxOutputTokens,
               }, TASK_TOKEN_BUDGET - taskOutputTokens, inputTokens);
-              if (requestOutputLimit === null || requestOutputLimit < 1) throw new Error(`No se conoce un límite de salida válido o se agotó el presupuesto acumulado para ${selected.modelId}.`);
-              const result = await completeText(selected.provider, selected.modelId, messages, nodeMode, controller.signal, requestOutputLimit, selected.outputTokenParameter);
+              if (requestOutputLimit !== null && requestOutputLimit < 1) throw new Error(`Se agotó el presupuesto acumulado o el contexto disponible para ${selected.modelId}.`);
+              let result: Awaited<ReturnType<typeof completeText>>;
+              try {
+                result = await completeText(selected.provider, selected.modelId, messages, nodeMode, controller.signal, requestOutputLimit ?? undefined, selected.outputTokenParameter);
+              } catch (error) {
+                throw Object.assign(new Error(error instanceof Error ? error.message : 'El proveedor rechazó la solicitud.'), { status: 502 });
+              }
               const status = continuationStatus(result.finishReason);
               nodeText = appendContinuation(nodeText, result.text);
               const outputTokens = Number(result.usage?.completion_tokens ?? result.usage?.output_tokens ?? result.usage?.candidatesTokenCount);
               const consumed = Number.isSafeInteger(outputTokens) && outputTokens > 0 ? outputTokens : estimateTextUnits(result.text);
               taskOutputTokens += consumed;
+              flowInputs.result = nodeText;
+              flowInputs.vars[id] = nodeText;
               if (taskOutputTokens > TASK_TOKEN_BUDGET) throw new Error('La generación superó el presupuesto global de tokens; el resultado del flujo quedó incompleto.');
               if (status === 'complete') { nodeComplete = true; break; }
               if (status !== 'incomplete') throw new Error(`El proveedor no confirmó que la salida de ${selected.modelId} esté completa (${String(result.finishReason || 'sin motivo')}).`);
@@ -284,9 +291,11 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
     return { id: runId, status: 'complete', output, logs, artifacts, elapsedMs: elapsed, estimatedCredits };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error de ejecución desconocido.';
+    const partialOutput = String(flowInputs.result || '');
     releaseUsage(user.id, reservation, 'failed', { workflowId: workflow.id, error: message });
-    db.prepare(`UPDATE workflow_runs SET status='failed',error=?,logs_json=?,finished_at=? WHERE id=?`)
-      .run(message.slice(0, 500), JSON.stringify(logs), new Date().toISOString(), runId);
+    db.prepare(`UPDATE workflow_runs SET status='failed',error=?,output_json=?,logs_json=?,finished_at=? WHERE id=?`)
+      .run(message.slice(0, 500), JSON.stringify({ text: partialOutput, variables: flowInputs.vars, incomplete: Boolean(partialOutput) }), JSON.stringify(logs), new Date().toISOString(), runId);
+    if (error instanceof Error && partialOutput) throw Object.assign(error, { partialOutput });
     throw error;
   } finally {
     clearTimeout(executionTimer);
