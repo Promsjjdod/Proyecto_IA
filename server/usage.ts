@@ -18,7 +18,7 @@ export function reserveUsage(user: AuthUser, idempotencyKey: string, operation: 
       const dayUsage = (db.prepare(`SELECT COALESCE(SUM(CASE WHEN status='reserved' THEN reserved WHEN status='complete' THEN credits ELSE 0 END),0) total FROM usage WHERE user_id=? AND created_at>=?`).get(user.id, dayStart()) as { total: number }).total;
       const monthUsage = (db.prepare(`SELECT COALESCE(SUM(CASE WHEN status='reserved' THEN reserved WHEN status='complete' THEN credits ELSE 0 END),0) total FROM usage WHERE user_id=? AND created_at>=?`).get(user.id, monthStart()) as { total: number }).total;
       if (current.credits < reserved) throw new QuotaError(`Créditos insuficientes para reservar hasta ${reserved} unidades internas. Saldo: ${current.credits}.`);
-      if (dayUsage + reserved > current.daily_limit) throw new QuotaError(`Se superaría el límite diario de ${current.daily_limit} unidades. Reduce el modo o inténtalo mañana.`);
+      if (dayUsage + reserved > current.daily_limit) throw new QuotaError(`Se superaría el límite diario de ${current.daily_limit} unidades. Reduce el tamaño de la tarea o inténtalo mañana.`);
       if (monthUsage + reserved > current.monthly_limit) throw new QuotaError(`Se superaría el límite mensual de ${current.monthly_limit} unidades.`);
       db.prepare('UPDATE users SET credits=credits-? WHERE id=?').run(reserved, user.id);
     }

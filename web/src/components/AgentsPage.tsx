@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowUpRight, Blocks, Bot, Check, Code2, Copy, FileSearch, Gamepad2, Globe2, Image, Pencil, Plus, Shield, Sparkles, Trash2, Workflow } from 'lucide-react';
-import type { Agent, Model, Mode, Provider } from '../types';
+import { normalizeMode, type Agent, type Model, type Mode, type Provider } from '../types';
 import { api } from '../api';
 import { EmptyState, ErrorBanner, Modal, ProviderIcon } from './common';
 
 const iconMap: Record<string, typeof Bot> = { sparkles: Sparkles, code: Code2, globe: Globe2, gamepad: Gamepad2, blocks: Blocks, 'file-search': FileSearch, workflow: Workflow, image: Image, audio: Sparkles, bot: Bot, pen: Pencil };
-const modeOptions: Mode[] = ['LOW', 'MEDIO', 'ALTO', 'EXTRA', 'MAX'];
+const modeOptions: Mode[] = ['LOW', 'MEDIO', 'HIGH', 'MAX'];
 type AgentForm = { id?: string; name: string; description: string; icon: string; instructions: string; providerId: string; modelId: string; mode: Mode; tools: string[]; limits: { maxActions: number; timeoutSeconds: number; fileAccess: boolean; imageAccess: boolean; audioAccess: boolean; memoryEnabled: boolean } };
 const blank: AgentForm = { name: '', description: '', icon: 'sparkles', instructions: 'Ayuda al usuario con rigor. Si tienes herramientas autorizadas, úsalas para completar acciones reales y comunica con precisión lo que has podido hacer.', providerId: '', modelId: '', mode: 'MEDIO', tools: [], limits: { maxActions: 8, timeoutSeconds: 120, fileAccess: false, imageAccess: false, audioAccess: false, memoryEnabled: false } };
 
@@ -18,7 +18,7 @@ export function AgentsPage({ agents, providers, modelsByProvider, selectedAgentI
   const [notice, setNotice] = useState('');
   const customAgents = agents.filter((agent) => !agent.builtin);
   const editAgent = (agent?: Agent) => setForm(agent ? { id: agent.id, name: agent.name, description: agent.description, icon: agent.icon, instructions: agent.instructions,
-    providerId: agent.providerId || '', modelId: agent.modelId || '', mode: agent.mode, tools: [...agent.tools], limits: { maxActions: 8, timeoutSeconds: 120, fileAccess: Boolean(agent.limits.fileAccess), imageAccess: Boolean(agent.limits.imageAccess), audioAccess: Boolean(agent.limits.audioAccess), memoryEnabled: Boolean(agent.limits.memoryEnabled), ...agent.limits } } : { ...blank, limits: { ...blank.limits }, tools: [] });
+    providerId: agent.providerId || '', modelId: agent.modelId || '', mode: normalizeMode(agent.mode), tools: [...agent.tools], limits: { maxActions: 8, timeoutSeconds: 120, fileAccess: Boolean(agent.limits.fileAccess), imageAccess: Boolean(agent.limits.imageAccess), audioAccess: Boolean(agent.limits.audioAccess), memoryEnabled: Boolean(agent.limits.memoryEnabled), ...agent.limits } } : { ...blank, limits: { ...blank.limits }, tools: [] });
   const save = async (event: FormEvent) => {
     event.preventDefault(); if (!form) return;
     setBusy(true); setError('');

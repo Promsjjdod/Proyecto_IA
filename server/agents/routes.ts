@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { requireAuth, type AuthRequest } from '../auth.js';
+import { normalizeUsageMode } from '../config.js';
 
 const router = Router();
 router.use(requireAuth);
 const allowedTools = new Set(['read_files', 'write_files', 'run_workflows']);
 const allowedIcons = new Set(['sparkles', 'code', 'globe', 'gamepad', 'blocks', 'file-search', 'workflow', 'image', 'audio', 'bot', 'pen']);
-const allowedModes = new Set(['LOW', 'MEDIO', 'ALTO', 'EXTRA', 'MAX']);
 function parseJson(value: string, fallback: any) { try { return JSON.parse(value || JSON.stringify(fallback)); } catch { return fallback; } }
 function dto(row: any) {
   return { id: row.id, name: row.name, description: row.description, icon: row.icon, instructions: row.instructions, providerId: row.provider_id, modelId: row.model_id,
@@ -25,14 +25,14 @@ function validateFields(input: any, current?: any) {
   const instructions = String(input.instructions ?? current?.instructions ?? '').trim();
   const providerId = input.providerId === undefined ? current?.provider_id || null : (input.providerId ? String(input.providerId) : null);
   const modelId = input.modelId === undefined ? current?.model_id || null : (input.modelId ? String(input.modelId) : null);
-  const mode = String(input.mode ?? current?.mode ?? 'MEDIO').toUpperCase();
+  const mode = normalizeUsageMode(input.mode ?? current?.mode ?? 'MEDIO');
   const tools = input.tools === undefined ? parseJson(current?.tools_json || '[]', []) : input.tools;
   const limits = input.limits === undefined ? parseJson(current?.limits_json || '{}', {}) : input.limits;
   if (name.length < 2 || name.length > 80) throw Object.assign(new Error('El nombre del agente debe tener entre 2 y 80 caracteres.'), { status: 400 });
   if (description.length > 240) throw Object.assign(new Error('La descripción no puede superar 240 caracteres.'), { status: 400 });
   if (!allowedIcons.has(icon)) throw Object.assign(new Error('Icono no permitido.'), { status: 400 });
   if (instructions.length < 5 || instructions.length > 8000) throw Object.assign(new Error('Las instrucciones deben tener entre 5 y 8 000 caracteres.'), { status: 400 });
-  if (!allowedModes.has(mode)) throw Object.assign(new Error('Modo no válido.'), { status: 400 });
+  if (!mode) throw Object.assign(new Error('Modo no válido.'), { status: 400 });
   if (!Array.isArray(tools) || tools.some((tool: any) => !allowedTools.has(tool))) throw Object.assign(new Error('Una o más herramientas no están disponibles.'), { status: 400 });
   if (!limits || typeof limits !== 'object' || Array.isArray(limits)) throw Object.assign(new Error('Límites no válidos.'), { status: 400 });
   const maxActions = Number(limits.maxActions ?? 8);

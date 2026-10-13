@@ -5,7 +5,7 @@ import { ProviderIcon } from './common';
 import type { ViewId } from './Sidebar';
 
 const pageTitle: Record<ViewId, string> = { chat: 'Conversación', compare: 'Comparar modelos', projects: 'Proyectos', agents: 'Habilidades', automations: 'Automatizaciones', images: 'Generación de imágenes', providers: 'Proveedores de IA', settings: 'Preferencias', admin: 'Administración', trash: 'Papelera' };
-const modeDetails: Record<Mode, string> = { LOW: 'Presupuesto bajo de tokens; no cambia la capacidad del modelo', MEDIO: 'Presupuesto equilibrado de tokens; no cambia la capacidad del modelo', ALTO: 'Presupuesto ampliado; la capacidad depende del modelo seleccionado', EXTRA: 'Presupuesto ampliado para programación y análisis', MAX: 'Hasta el presupuesto permitido por el modelo y la cuenta; no garantiza más capacidad' };
+const modeDetails: Record<Mode, string> = { LOW: 'Prioriza una resolución directa sin reducir la longitud solicitada', MEDIO: 'Equilibra planificación y verificación', HIGH: 'Aumenta la profundidad de análisis y planificación', MAX: 'Usa la estrategia más exhaustiva disponible; los límites dependen del modelo' };
 const tokenLabel = (value?: number | null) => Number.isSafeInteger(value) && Number(value) > 0 ? Number(value).toLocaleString() : 'sin dato';
 
 export function Header({ view, providers, modelsByProvider, providerId, modelId, mode, onModelChange, onModeChange, onMenu }: {
@@ -24,7 +24,7 @@ export function Header({ view, providers, modelsByProvider, providerId, modelId,
         {providers.map((provider) => <optgroup key={provider.id} label={provider.name}>{(modelsByProvider[provider.id] || []).map((model) => <option key={`${provider.id}::${model.id}`} value={`${provider.id}::${model.id}`} disabled={model.status === 'unavailable'}>{model.displayName}{model.favorite ? ' ★' : ''}{model.status === 'unavailable' ? ' · NO DISPONIBLE' : model.status !== 'available' ? ' · SIN COMPROBAR' : ''}</option>)}</optgroup>)}
       </select><ChevronDown size={13} /></label>
       <span className="topbar-divider" />
-      <label className={`mode-select-wrap mode-${mode.toLowerCase()}`} title={modeDetails[mode]}><Sparkles size={14} /><select aria-label="Modo de uso" value={mode} onChange={(event) => onModeChange(event.target.value as Mode)}><option value="LOW">LOW</option><option value="MEDIO">MEDIO · recomendado</option><option value="ALTO">ALTO</option><option value="EXTRA">EXTRA</option><option value="MAX">MAX</option></select><ChevronDown size={13} /></label>
+      <label className={`mode-select-wrap mode-${mode.toLowerCase()}`} title={modeDetails[mode]}><Sparkles size={14} /><select aria-label="Modo de uso" value={mode} onChange={(event) => onModeChange(event.target.value as Mode)}><option value="LOW">LOW</option><option value="MEDIO">MEDIO · recomendado</option><option value="HIGH">HIGH</option><option value="MAX">MAX</option></select><ChevronDown size={13} /></label>
       <div className="connection-indicator" title={current ? `${current.provider.name} · estado del catálogo; no es una prueba de conexión en vivo` : 'Sin modelo seleccionado'}><span className={current?.model.status === 'available' ? 'connection-dot online' : 'connection-dot'} /><span>{!current ? 'Sin modelo' : current.model.status === 'unavailable' ? 'No disponible' : current.model.status === 'available' ? 'Detectado' : 'Sin comprobar'}</span></div>
     </div>
   </header>;

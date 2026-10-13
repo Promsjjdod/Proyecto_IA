@@ -16,13 +16,15 @@ const { db } = await import('../server/db.js');
 const { encryptSecret, decryptSecret } = await import('../server/security.js');
 const safety = await import('../server/providers/safety.js');
 const { parseProviderSSE } = await import('../server/providers/sse.js');
-const { streamCompletion } = await import('../server/providers/index.js');
+const { streamCompletion, outputTokenLimitFields } = await import('../server/providers/index.js');
+const { buildContinuationMessages, appendContinuation } = await import('../server/continuation.js');
+const { completionStatusFromReason, effectiveTaskTokenBudget, remainingTaskTokenBudget, shouldAutoContinueGeneration, saveGenerationCheckpoint, loadGenerationCheckpoint } = await import('../server/chats/routes.js');
 const paths = await import('../server/workspaces/paths.js');
 const { executeWorkflow, validateWorkflow } = await import('../server/workflows/engine.js');
 const { generateWorkflowDraft, getWorkflowGeneratorOptions } = await import('../server/workflows/generator.js');
-const { PROJECT_DIR, UPLOAD_DIR, budgetForMode } = await import('../server/config.js');
+const { PROJECT_DIR, UPLOAD_DIR, DEFAULT_TASK_TOKEN_BUDGET, TASK_TOKEN_BUDGET, MAX_TASK_TOKENS, budgetForMode, outputLimitForRequest, normalizeUsageMode } = await import('../server/config.js');
 const { cleanupUnreferencedAttachments } = await import('../server/uploads.js');
-const { reserveUsage, settleUsage } = await import('../server/usage.js');
+const { reserveUsage, settleUsage, estimateTextUnits } = await import('../server/usage.js');
 
 function insertTestUser(email: string) {
   const id = crypto.randomUUID();
@@ -50,16 +52,36 @@ after(() => {
 });
 
 test('credential encryption, provider allowlists, and DNS-pinned requests', async (t) => {
-  assert.deepEqual(budgetForMode('MAX', { contextTokens: 4096 }), { outputTokens: 3584, inputContextTokens: 512 });
-  assert.deepEqual(budgetForMode('MAX', { contextTokens: 32768, maxOutputTokens: 2048 }), { outputTokens: 2048, inputContextTokens: 30720 });
-  assert.deepEqual(budgetForMode('MAX', { contextTokens: 32768, maxOutputTokens: 99999 }), { outputTokens: 6000, inputContextTokens: 26768 });
-  assert.deepEqual(budgetForMode('LOW', { contextTokens: 4096, maxOutputTokens: 128 }), { outputTokens: 128, inputContextTokens: 3000 });
+  assert.deepEqual(budgetForMode('MAX', { contextTokens: 4096 }), { outputTokens: null, inputContextTokens: 4096 });
+  assert.deepEqual(budgetForMode('MAX', { contextTokens: 32768, maxOutputTokens: 2048 }), { outputTokens: 2048, inputContextTokens: 32768 });
+  assert.deepEqual(budgetForMode('MAX', { contextTokens: 32768, maxOutputTokens: 99999 }), { outputTokens: 99999, inputContextTokens: 32768 });
+  assert.deepEqual(budgetForMode('LOW', { contextTokens: 4096, maxOutputTokens: 128 }), { outputTokens: 128, inputContextTokens: 4096 });
   assert.deepEqual(budgetForMode('MAX', { maxInputTokens: 8192, maxOutputTokens: 2048 }), { outputTokens: 2048, inputContextTokens: 8192 });
   assert.deepEqual(budgetForMode('MAX', { maxInputTokens: 4096, maxOutputTokens: 1024 }), { outputTokens: 1024, inputContextTokens: 4096 });
-  const modeBudgets = (['LOW', 'MEDIO', 'ALTO', 'EXTRA', 'MAX'] as const).map((mode) => budgetForMode(mode, { contextTokens: 100_000 }));
-  assert.deepEqual(modeBudgets.map((budget) => budget.outputTokens), [512, 1200, 2400, 4000, 6000]);
-  assert.deepEqual(modeBudgets.map((budget) => budget.inputContextTokens), [3000, 6000, 12000, 20000, 32000]);
-  assert.equal(budgetForMode('MAX', { contextTokens: 256 }).outputTokens, 0);
+  const modes = ['LOW', 'MEDIO', 'HIGH', 'MAX'] as const;
+  assert.deepEqual(modes.map((mode) => budgetForMode(mode, { contextTokens: 4096 })), modes.map(() => ({ outputTokens: null, inputContextTokens: 4096 })));
+  const modeBudgets = modes.map((mode) => budgetForMode(mode, { contextTokens: 100_000, maxInputTokens: 80_000, maxOutputTokens: 16_000 }));
+  assert.deepEqual(modeBudgets, modes.map(() => ({ outputTokens: 16_000, inputContextTokens: 80_000 })));
+  assert.deepEqual(modes.map((mode) => budgetForMode(mode, { contextTokens: 32_768, maxOutputTokens: 8_192 })), modes.map(() => ({ outputTokens: 8_192, inputContextTokens: 32_768 })));
+  assert.deepEqual(modes.map(() => effectiveTaskTokenBudget()), modes.map(() => 1_000_000));
+  assert.deepEqual(modes.map(() => outputLimitForRequest({ maxOutputTokens: 4_096 }, 1_000_000, 12_000)), modes.map(() => 4_096));
+  assert.deepEqual(modes.map(() => outputLimitForRequest({ maxOutputTokens: 16_384 }, 1_000_000, 12_000)), modes.map(() => 16_384));
+  assert.deepEqual(modes.map(() => outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: 8_192 }, 1_000_000, 12_000)), modes.map(() => 8_192));
+  assert.equal(outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: 8_192 }, 1_000_000, 12_000), 8_192);
+  assert.equal(outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: 8_192 }, 2_000, 30_000), 2_000);
+  assert.equal(outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: 8_192 }, 1_000_000, 31_000), 1_768);
+  assert.equal(outputLimitForRequest({ maxInputTokens: 16_000, maxOutputTokens: 8_192 }, 1_000_000, 16_001), 0);
+  assert.equal(outputLimitForRequest({ maxInputTokens: 16_000, maxOutputTokens: 8_192 }, 1_000_000, 16_000), 8_192);
+  assert.equal(outputLimitForRequest({ maxOutputTokens: 8_192 }, 3_000, 12_000), 3_000);
+  assert.equal(outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: null }, 1_000_000, 12_000), null);
+  assert.deepEqual(outputTokenLimitFields('openai', 4_096), { max_completion_tokens: 4_096 });
+  assert.deepEqual(outputTokenLimitFields('anthropic', 8_192), { max_tokens: 8_192 });
+  assert.deepEqual(outputTokenLimitFields('google', 2_048), { generationConfig: { maxOutputTokens: 2_048 } });
+  assert.deepEqual(outputTokenLimitFields('deepseek', 6_144), { max_tokens: 6_144 });
+  assert.deepEqual(outputTokenLimitFields('openai-compatible', 3_072), { max_tokens: 3_072 });
+  assert.deepEqual(outputTokenLimitFields('openai', undefined), {});
+  assert.equal(normalizeUsageMode('ALTO'), 'HIGH');
+  assert.equal(normalizeUsageMode('EXTRA'), 'HIGH');
   assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'max_input_tokens'));
   assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'max_output_tokens'));
   const encrypted = encryptSecret('test-secret-value');
@@ -118,13 +140,55 @@ test('provider SSE parsing survives split CRLF frames and reports missing or tru
   assert.deepEqual(missing.at(-1), { type: 'finish', reason: 'stream:done-without-finish-reason', complete: false, truncated: false });
 });
 
+test('token-limit reasons and large task budgets are handled without duplicating output', async () => {
+  assert.equal(completionStatusFromReason('openai:max_output_tokens'), 'incomplete');
+  assert.equal(completionStatusFromReason('anthropic:stop'), 'complete');
+  assert.equal(completionStatusFromReason('stream:done-without-finish-reason'), 'incomplete');
+  assert.equal(TASK_TOKEN_BUDGET, 1_000_000);
+  assert.equal(MAX_TASK_TOKENS, 1_000_000);
+  assert.equal(DEFAULT_TASK_TOKEN_BUDGET, 1_000_000);
+  assert.equal(effectiveTaskTokenBudget(500_000), 500_000);
+  assert.equal(effectiveTaskTokenBudget(2_000_000), 1_000_000);
+  assert.equal(effectiveTaskTokenBudget(Number.MAX_SAFE_INTEGER + 1), 1_000_000);
+  assert.equal(remainingTaskTokenBudget(800_000), 200_000);
+  assert.equal(shouldAutoContinueGeneration('openai:max_completion_tokens', 'incomplete', 800_000), true);
+  assert.equal(shouldAutoContinueGeneration('stream:done-without-finish-reason', 'unverified', 800_000), true);
+  assert.equal(shouldAutoContinueGeneration('openai:max_completion_tokens', 'incomplete', 1_000_000), false);
+  assert.equal(shouldAutoContinueGeneration('stop', 'complete', 250_000), false);
+  assert.equal(appendContinuation('hello world', 'hello world again'), 'hello world again');
+  assert.equal(appendContinuation('hello world', 'world again'), 'hello world again');
+  assert.equal(appendContinuation('prefix/hello', 'prefix/hello/again'), 'prefix/hello/again');
+  assert.equal(appendContinuation('abcXYZ123', 'XYZ123def'), 'abcXYZ123def');
+  assert.equal(appendContinuation('first second', 'third fourth'), 'first secondthird fourth');
+  const longTail = 'x'.repeat(2048);
+  assert.equal(appendContinuation(`prior${longTail}`, `${longTail}following`), `prior${longTail}following`);
+  const continuedMessages = buildContinuationMessages(
+    [{ role: 'user', content: 'Original task' }],
+    'generated'.repeat(20_000),
+    'Continue without repeating.',
+    { contextTokens: 32_768, maxInputTokens: 30_000, maxOutputTokens: 8_192 },
+    1_000_000,
+  );
+  assert.equal(continuedMessages.at(-2)?.role, 'assistant');
+  assert.ok(continuedMessages.at(-2)!.content.length < 'generated'.repeat(20_000).length);
+  assert.ok(estimateTextUnits(continuedMessages.map((message) => message.content).join('\n')) + 8_192 <= 32_768);
+  const user = insertTestUser('checkpoint@nexus.test');
+  const chatId = crypto.randomUUID();
+  db.prepare('INSERT INTO chats(id,user_id,title,project_id,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(chatId, user.id, 'Checkpoint test', null, new Date().toISOString(), new Date().toISOString());
+  const checkpointId = saveGenerationCheckpoint({ userId: user.id, chatId, status: 'incomplete', currentText: 'primer fragmento', reason: 'max_output_tokens', nextStep: 'resume-next-pass' });
+  const saved = loadGenerationCheckpoint(user.id, chatId);
+  assert.equal(saved?.currentText, 'primer fragmento');
+  assert.equal(saved?.status, 'incomplete');
+  assert.equal(checkpointId.id.length > 0, true);
+});
+
 test('provider adapters send the model-specific output-token ceiling upstream', async (t) => {
-  let requestBody: any;
+  const requestBodies: any[] = [];
   const server = http.createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
     request.on('end', () => {
-      requestBody = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      requestBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
       response.end('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
     });
@@ -136,11 +200,168 @@ test('provider adapters send the model-specific output-token ceiling upstream', 
   process.env.OLLAMA_ALLOWED_URLS = `http://localhost:${port}`;
   t.after(() => { process.env.OLLAMA_ALLOWED_URLS = previousAllowlist || 'http://localhost:11434,http://127.0.0.1:11434,http://[::1]:11434'; });
   const provider = { id: 'test-provider', user_id: 'test-user', type: 'ollama', name: 'Mock local provider', base_url: baseUrl, secret_encrypted: '', auth_config_json: '{}' };
-  const events = [];
-  for await (const event of streamCompletion(provider, 'mock-model', [{ role: 'user', content: 'hello' }], 'MAX', undefined, 1024)) events.push(event);
-  assert.equal(requestBody.max_tokens, 1024);
-  assert.equal(events.find((event) => event.type === 'delta')?.text, 'ok');
-  assert.equal((events.find((event) => event.type === 'finish') as any)?.complete, true);
+  const modes = ['LOW', 'MEDIO', 'HIGH', 'MAX'] as const;
+  for (const mode of modes) {
+    const events = [];
+    for await (const event of streamCompletion(provider, 'mock-model', [{ role: 'user', content: 'hello' }], mode, undefined, 1024)) events.push(event);
+    assert.equal(events.find((event) => event.type === 'delta')?.text, 'ok');
+    assert.equal((events.find((event) => event.type === 'finish') as any)?.complete, true);
+  }
+  assert.deepEqual(requestBodies.map((body) => body.max_tokens), modes.map(() => 1024));
+});
+
+test('chat integration continues long output across requests without duplication and preserves partial output on failure', async (t) => {
+  const { createApp } = await import('../server/index.js');
+  const { setCsrfToken, streamChat } = await import('../web/src/api.js');
+  const calls: { body: any; scenario: 'complete' | 'multi' | 'fail' }[] = [];
+  let scenario: 'complete' | 'multi' | 'fail' = 'complete';
+  const firstPart = '<!doctype html><html><body><main>Primera parte';
+  const secondPart = 'Primera parte y segunda parte</main></body></html>';
+  const expectedHtml = firstPart + ' y segunda parte</main></body></html>';
+  const mockProvider = http.createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    request.on('end', () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const isContinuation = body.messages.some((message: any) => message.role === 'user' && /No repitas/.test(message.content));
+      const scenarioRequest = calls.filter((call) => call.scenario === scenario).length;
+      calls.push({ body, scenario });
+      if (scenario === 'fail' && isContinuation) {
+        response.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'simulated continuation failure' } }));
+        return;
+      }
+      const multiParts = ['Fragmento A', 'Fragmento A y fragmento B', 'fragmento B y fragmento C'];
+      const text = scenario === 'multi' ? multiParts[scenarioRequest] : isContinuation ? secondPart : firstPart;
+      const finishReason = scenario === 'multi' ? scenarioRequest < 2 ? 'length' : 'stop' : isContinuation ? 'stop' : 'length';
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.end([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: text }, finish_reason: null }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 50, completion_tokens: 1024 } })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finishReason }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ].join(''));
+    });
+  });
+  const providerPort = await listen(mockProvider, '::');
+  t.after(() => close(mockProvider));
+  const previousAllowlist = process.env.OLLAMA_ALLOWED_URLS;
+  process.env.OLLAMA_ALLOWED_URLS = `http://localhost:${providerPort}`;
+  t.after(() => { process.env.OLLAMA_ALLOWED_URLS = previousAllowlist || 'http://localhost:11434,http://127.0.0.1:11434,http://[::1]:11434'; });
+
+  const apiServer = createApp().listen(0, '127.0.0.1');
+  await once(apiServer, 'listening');
+  t.after(() => close(apiServer));
+  const address = apiServer.address();
+  assert.ok(address && typeof address === 'object');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const registrationResponse = await fetch(`${origin}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Chat integration', email: 'chat-continuation@nexus.test', password: 'A-very-long-test-password-123' }),
+  });
+  assert.equal(registrationResponse.status, 201);
+  const cookie = registrationResponse.headers.get('set-cookie')!.split(';', 1)[0];
+  const registration = await registrationResponse.json() as any;
+  setCsrfToken(registration.csrfToken);
+  const userId = registration.user.id as string;
+  db.prepare('UPDATE users SET credits=1000000,daily_limit=1000000,monthly_limit=1000000 WHERE id=?').run(userId);
+  const now = new Date().toISOString();
+  const providerId = crypto.randomUUID();
+  const modelId = 'mock-html-model';
+  db.prepare(`INSERT INTO providers(id,user_id,type,name,base_url,status,created_at,updated_at)
+    VALUES(?,?,'ollama','Continuation mock',?,'connected',?,?)`).run(providerId, userId, `http://localhost:${providerPort}/v1`, now, now);
+  db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,context_tokens,max_input_tokens,max_output_tokens,created_at,updated_at)
+    VALUES(?,?,?,?,'manual','available',32768,24000,4096,?,?)`).run(crypto.randomUUID(), providerId, modelId, modelId, now, now);
+  const createChat = () => {
+    const chatId = crypto.randomUUID();
+    db.prepare('INSERT INTO chats(id,user_id,title,project_id,created_at,updated_at) VALUES(?,?,?,NULL,?,?)')
+      .run(chatId, userId, 'HTML continuation integration', now, now);
+    return chatId;
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof input === 'string' && input.startsWith('/api/')) {
+      const headers = new Headers(init?.headers);
+      headers.set('Cookie', cookie);
+      return originalFetch(`${origin}${input}`, { ...init, headers });
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+  t.after(() => { globalThis.fetch = originalFetch; setCsrfToken(''); });
+
+  const collectedFor = async (chatId: string, mode = 'MEDIO') => {
+    let html = '';
+    const finishes: any[] = [];
+    const errors: string[] = [];
+    const done = await streamChat(chatId, { content: 'Genera una página HTML', providerId, modelId, mode }, new AbortController().signal, {
+      onDelta: (text) => { html += text; },
+      onFinish: (finish) => finishes.push(finish),
+      onError: (message) => errors.push(message),
+    });
+    return { html, finishes, errors, done };
+  };
+
+  try {
+    const successfulChatId = createChat();
+    const successful = await collectedFor(successfulChatId);
+    const successfulCalls = calls.filter((call) => call.scenario === 'complete');
+    assert.equal(successfulCalls.length, 2, 'the route must issue a second provider request after finish_reason=length');
+    assert.deepEqual(successfulCalls.map((call) => call.body.max_tokens), [4096, 4096]);
+    assert.ok(successfulCalls[1].body.messages.some((message: any) => message.role === 'assistant' && message.content === firstPart));
+    assert.ok(successfulCalls[1].body.messages.some((message: any) => message.role === 'user' && /No repitas/.test(message.content)));
+    assert.equal(successful.html, expectedHtml, 'the frontend stream consumer must receive the combined HTML exactly once');
+    assert.deepEqual(successful.finishes.map((finish) => finish.status), ['incomplete', 'complete']);
+    assert.equal(successful.done.completionStatus, 'complete');
+    const savedSuccess = db.prepare("SELECT content,meta_json FROM messages WHERE chat_id=? AND role='assistant'").get(successfulChatId) as any;
+    assert.equal(savedSuccess.content, expectedHtml);
+    const successMeta = JSON.parse(savedSuccess.meta_json);
+    assert.equal(successMeta.status, 'complete');
+    assert.equal(successMeta.providerUsage.outputTokens, 2048, 'output usage is summed across provider calls, not estimated from the final character count');
+    assert.equal(successMeta.providerUsage.inputTokens, 100);
+    assert.equal(successMeta.estimatedCredits, 2148);
+    for (const mode of ['LOW', 'HIGH', 'MAX']) {
+      const modeChatId = createChat();
+      const modeResult = await collectedFor(modeChatId, mode);
+      assert.equal(modeResult.html, expectedHtml);
+      assert.equal(modeResult.done.completionStatus, 'complete');
+    }
+    const allSuccessfulCalls = calls.filter((call) => call.scenario === 'complete');
+    assert.equal(allSuccessfulCalls.length, 8, 'each of LOW, MEDIO, HIGH, and MAX completes through two requests');
+    assert.deepEqual(allSuccessfulCalls.map((call) => call.body.max_tokens), allSuccessfulCalls.map(() => 4096));
+
+    scenario = 'multi';
+    const multiChatId = createChat();
+    const multi = await collectedFor(multiChatId);
+    const multiCalls = calls.filter((call) => call.scenario === 'multi');
+    assert.equal(multiCalls.length, 3);
+    assert.equal(multi.html, 'Fragmento A y fragmento B y fragmento C');
+    assert.deepEqual(multi.finishes.map((finish) => finish.status), ['incomplete', 'incomplete', 'complete']);
+    assert.equal(multi.done.completionStatus, 'complete');
+    const multiSaved = db.prepare("SELECT content,meta_json FROM messages WHERE chat_id=? AND role='assistant'").get(multiChatId) as any;
+    assert.equal(multiSaved.content, multi.html);
+    assert.equal(JSON.parse(multiSaved.meta_json).providerUsage.outputTokens, 3072);
+
+    scenario = 'fail';
+    const failedChatId = createChat();
+    const failed = await collectedFor(failedChatId);
+    const failedCalls = calls.filter((call) => call.scenario === 'fail');
+    assert.equal(failedCalls.length, 2, 'the second provider request must be attempted in the failure case too');
+    assert.equal(failed.html, firstPart, 'the frontend retains the partial response');
+    assert.equal(failed.errors.length, 1);
+    assert.match(failed.errors[0], /simulated continuation failure/i);
+    assert.equal(failed.done.completionStatus, 'incomplete');
+    const savedFailure = db.prepare("SELECT content,meta_json FROM messages WHERE chat_id=? AND role='assistant'").get(failedChatId) as any;
+    assert.equal(savedFailure.content, firstPart);
+    assert.equal(JSON.parse(savedFailure.meta_json).status, 'incomplete');
+    assert.equal(JSON.parse(savedFailure.meta_json).providerUsage.outputTokens, 1024);
+    const checkpoint = db.prepare('SELECT status,current_text,next_step FROM generation_checkpoints WHERE chat_id=?').get(failedChatId) as any;
+    assert.equal(checkpoint.status, 'incomplete');
+    assert.equal(checkpoint.current_text, firstPart);
+    assert.equal(checkpoint.next_step, 'retry-or-resume');
+  } finally {
+    globalThis.fetch = originalFetch;
+    setCsrfToken('');
+  }
 });
 
 test('usage settlement refunds unused reservations and cannot exceed account quotas', () => {
@@ -373,6 +594,7 @@ test('workflow generator follows provider order, uses adapters, validates plans,
   const generated = await generateWorkflowDraft(user, 'Procesá el texto de entrada y devolvé el resultado.', undefined, undefined, crypto.randomUUID());
   assert.equal(generated.generatedBy.providerId, middle.providerId);
   assert.equal(requestBodies.at(-1)?.model, middle.modelId);
+  assert.equal(requestBodies.at(-1)?.max_tokens, 4096);
   assert.equal(generated.nodes.find((node) => node.type === 'ai')?.config?.providerId, middle.providerId);
   assert.equal(generated.nodes.find((node) => node.type === 'ai')?.config?.modelId, middle.modelId);
   assert.equal(generated.usage.estimated, false);

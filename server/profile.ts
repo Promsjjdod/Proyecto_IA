@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from './db.js';
 import { requireAuth, type AuthRequest } from './auth.js';
-import { MODE_POLICIES } from './config.js';
+import { MODE_POLICIES, normalizeUsageMode } from './config.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -23,8 +23,8 @@ router.patch('/preferences', (req: AuthRequest, res) => {
     preferences.theme = patch.theme;
   }
   if (patch.defaultMode !== undefined) {
-    const mode = String(patch.defaultMode).toUpperCase();
-    if (!modes.has(mode)) return res.status(400).json({ error: 'Modo predeterminado no válido.' });
+    const mode = normalizeUsageMode(patch.defaultMode);
+    if (!mode || !modes.has(mode)) return res.status(400).json({ error: 'Modo predeterminado no válido.' });
     preferences.defaultMode = mode;
   }
   if (patch.defaultProviderId !== undefined) {

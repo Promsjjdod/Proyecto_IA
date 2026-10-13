@@ -22,35 +22,49 @@ export const ALLOWED_PROVIDER_TYPES = (process.env.ALLOWED_PROVIDER_TYPES || 'op
   .split(',').map((v) => v.trim()).filter(Boolean);
 
 export const MODE_POLICIES = {
-  LOW: { outputTokens: 512, inputContextTokens: 3_000, label: 'Rápido y económico' },
-  MEDIO: { outputTokens: 1_200, inputContextTokens: 6_000, label: 'Equilibrado · recomendado' },
-  ALTO: { outputTokens: 2_400, inputContextTokens: 12_000, label: 'Más profundidad' },
-  EXTRA: { outputTokens: 4_000, inputContextTokens: 20_000, label: 'Programación y análisis' },
-  MAX: { outputTokens: 6_000, inputContextTokens: 32_000, label: 'Máxima configuración disponible' },
+  LOW: { effort: 'low', label: 'Rápido y directo', instruction: 'Resuelve la solicitud directamente con la planificación mínima necesaria. No reduzcas ni omitas contenido que el usuario haya pedido.' },
+  MEDIO: { effort: 'balanced', label: 'Equilibrado · recomendado', instruction: 'Equilibra la planificación, la verificación y la explicación según la complejidad de la solicitud.' },
+  HIGH: { effort: 'high', label: 'Más profundidad y planificación', instruction: 'Analiza los requisitos, planifica los pasos y verifica las partes importantes antes de concluir.' },
+  MAX: { effort: 'maximum', label: 'Máxima profundidad disponible', instruction: 'Usa la planificación y verificación más exhaustivas que permita el modelo; completa el trabajo sin abreviarlo por el modo.' },
 } as const;
+export const DEFAULT_TASK_TOKEN_BUDGET = 1_000_000;
+export const MAX_TASK_TOKENS = DEFAULT_TASK_TOKEN_BUDGET;
+const configuredTaskBudget = Number(process.env.TASK_TOKEN_BUDGET ?? DEFAULT_TASK_TOKEN_BUDGET);
+export const TASK_TOKEN_BUDGET = Number.isSafeInteger(configuredTaskBudget) && configuredTaskBudget > 0 && configuredTaskBudget <= MAX_TASK_TOKENS
+  ? configuredTaskBudget
+  : DEFAULT_TASK_TOKEN_BUDGET;
 export type UsageMode = keyof typeof MODE_POLICIES;
 export type ModelTokenLimits = { contextTokens?: number | null; maxInputTokens?: number | null; maxOutputTokens?: number | null };
+export function normalizeUsageMode(value: unknown): UsageMode | null {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'ALTO' || normalized === 'EXTRA') return 'HIGH';
+  return normalized in MODE_POLICIES ? normalized as UsageMode : null;
+}
 
 function positiveTokenLimit(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-/** Applies distinct provider limits. contextTokens is the aggregate window; maxInput/maxOutput are independent advertised ceilings. */
-export function budgetForMode(mode: UsageMode, limits: ModelTokenLimits = {}) {
-  const requested = MODE_POLICIES[mode] || MODE_POLICIES.MEDIO;
+/** Applies provider/model limits only; work modes do not set input or output token caps. */
+export function budgetForMode(_mode: UsageMode, limits: ModelTokenLimits = {}) {
   const configuredContext = positiveTokenLimit(limits.contextTokens);
   const configuredInput = positiveTokenLimit(limits.maxInputTokens);
   const configuredOutput = positiveTokenLimit(limits.maxOutputTokens);
-  // When neither aggregate context nor a provider input ceiling is known, use only a local fallback.
-  const context = configuredContext ?? (configuredInput === null ? 8192 : null);
-  const outputTokens = Math.max(0, Math.min(requested.outputTokens, configuredOutput ?? Number.POSITIVE_INFINITY, context === null ? Number.POSITIVE_INFINITY : context - 512));
-  const inputContextTokens = Math.max(0, Math.min(
-    requested.inputContextTokens,
-    configuredInput ?? Number.POSITIVE_INFINITY,
-    context === null ? Number.POSITIVE_INFINITY : context - outputTokens,
-  ));
-  return { outputTokens, inputContextTokens };
+  return { outputTokens: configuredOutput, inputContextTokens: configuredInput ?? configuredContext };
+}
+
+export function outputLimitForRequest(limits: ModelTokenLimits, remainingTaskTokens: number, estimatedInputTokens: number) {
+  const modelLimit = positiveTokenLimit(limits.maxOutputTokens);
+  if (modelLimit === null) return null;
+  const remaining = positiveTokenLimit(remainingTaskTokens);
+  if (remaining === null) return 0;
+  const input = Math.max(0, estimatedInputTokens);
+  const maxInput = positiveTokenLimit(limits.maxInputTokens);
+  if (maxInput !== null && input > maxInput) return 0;
+  const context = positiveTokenLimit(limits.contextTokens);
+  const contextRemaining = context === null ? Number.POSITIVE_INFINITY : Math.max(0, context - input);
+  return Math.max(0, Math.min(modelLimit, remaining, contextRemaining));
 }
 
 export const BUILTIN_AGENTS = [
