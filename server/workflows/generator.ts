@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { budgetForMode, MODE_POLICIES, normalizeUsageMode, outputLimitForRequest, TASK_TOKEN_BUDGET } from '../config.js';
+import { budgetForMode, MODE_POLICIES, normalizeUsageMode, outputLimitForRequest, resolveModelOutputLimit, TASK_TOKEN_BUDGET } from '../config.js';
 import type { AuthUser } from '../auth.js';
 import { completeText } from '../providers/index.js';
 import type { CanonicalMessage, ProviderRecord } from '../providers/types.js';
@@ -40,6 +40,7 @@ type SelectedGenerator = {
   contextTokens: number | null;
   maxInputTokens: number | null;
   maxOutputTokens: number | null;
+  outputTokenParameter: string | null;
 };
 
 function fail(message: string, status: number, code?: string) {
@@ -57,10 +58,10 @@ function providerConfigProblem(provider: ProviderRecord & { status: string }) {
 }
 
 function providerModels(providerId: string) {
-  return db.prepare(`SELECT model_id,display_name,favorite,status,context_tokens,max_input_tokens,max_output_tokens
+  return db.prepare(`SELECT model_id,display_name,favorite,status,context_tokens,max_input_tokens,max_output_tokens,configured_max_output_tokens
     FROM provider_models WHERE provider_id=? ORDER BY favorite DESC,display_name COLLATE NOCASE,model_id`).all(providerId) as {
     model_id: string; display_name: string; favorite: number; status: string;
-    context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null;
+    context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null; configured_max_output_tokens: number | null;
   }[];
 }
 
@@ -107,14 +108,15 @@ function chooseGenerator(userId: string, requestedProviderId?: string, requested
   if (!modelOption) throw fail('Elegí un modelo disponible y confirmado para este proveedor.', 409, 'GENERATOR_MODEL_UNAVAILABLE');
 
   const provider = db.prepare('SELECT * FROM providers WHERE id=? AND user_id=?').get(selected.id, userId) as ProviderRecord | undefined;
-  const model = db.prepare(`SELECT context_tokens,max_input_tokens,max_output_tokens,status FROM provider_models
+  const model = db.prepare(`SELECT context_tokens,max_input_tokens,max_output_tokens,configured_max_output_tokens,output_token_parameter,status FROM provider_models
     WHERE provider_id=? AND model_id=?`).get(selected.id, modelOption.id) as {
-    context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null; status: string;
+    context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null; configured_max_output_tokens: number | null; output_token_parameter: string | null; status: string;
   } | undefined;
   if (!provider || !model || !AVAILABLE_MODEL_STATUSES.has(model.status)) throw fail('El proveedor o modelo dejó de estar disponible. Actualizá Proveedores e intentá de nuevo.', 409, 'GENERATOR_MODEL_UNAVAILABLE');
+  const outputLimit = resolveModelOutputLimit(model.max_output_tokens, model.configured_max_output_tokens);
   return {
     provider, providerId: provider.id, providerName: provider.name, modelId: modelOption.id, modelName: modelOption.displayName,
-    contextTokens: model.context_tokens, maxInputTokens: model.max_input_tokens, maxOutputTokens: model.max_output_tokens,
+    contextTokens: model.context_tokens, maxInputTokens: model.max_input_tokens, maxOutputTokens: outputLimit.maxOutputTokens, outputTokenParameter: model.output_token_parameter,
   };
 }
 
@@ -327,7 +329,7 @@ export async function generateWorkflowDraft(user: AuthUser, requestText: string,
         const remaining = TASK_TOKEN_BUDGET - outputTokens;
         const requestLimit = outputLimitForRequest(selected, remaining, estimateTextUnits(currentPrompt));
         if (requestLimit === null || requestLimit < 1) throw fail('Se agotó el presupuesto disponible o el contexto del modelo antes de completar el borrador.', 422, 'INCOMPLETE_GENERATION');
-        const result = await completeText(selected.provider, selected.modelId, messages, USAGE_MODE, controller.signal, requestLimit);
+        const result = await completeText(selected.provider, selected.modelId, messages, USAGE_MODE, controller.signal, requestLimit, selected.outputTokenParameter);
         finalReason = result.finishReason;
         generatedText = appendContinuation(generatedText, result.text);
         const usage = providerUsage(result, currentPrompt);

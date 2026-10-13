@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { encryptSecret, decryptSecret } from '../security.js';
-import { ALLOWED_PROVIDER_TYPES, DEFAULT_PROVIDER_URLS } from '../config.js';
+import { ALLOWED_PROVIDER_TYPES, DEFAULT_PROVIDER_URLS, resolveModelOutputLimit } from '../config.js';
 import { requireAuth, type AuthRequest } from '../auth.js';
 import { validateProviderBase } from './safety.js';
 import { discoverModels, testProvider, type ModelSummary } from './index.js';
@@ -28,8 +28,12 @@ function ownedProvider(userId: string, providerId: string): ProviderRecord {
 function modelDto(row: any) {
   let capabilities = {};
   try { capabilities = JSON.parse(row.capabilities_json || '{}'); } catch { /* ignore */ }
+  const outputLimit = resolveModelOutputLimit(row.max_output_tokens, row.configured_max_output_tokens);
   return { id: row.model_id, displayName: row.display_name, source: row.source, status: row.status, favorite: Boolean(row.favorite),
-    capabilities, contextTokens: row.context_tokens ?? null, maxInputTokens: row.max_input_tokens ?? null, maxOutputTokens: row.max_output_tokens ?? null };
+    capabilities, contextTokens: row.context_tokens ?? null, maxInputTokens: row.max_input_tokens ?? null,
+    maxOutputTokens: outputLimit.maxOutputTokens, providerMaxOutputTokens: row.max_output_tokens ?? null,
+    configuredMaxOutputTokens: row.configured_max_output_tokens ?? null, outputLimitSource: outputLimit.source,
+    outputTokenParameter: row.output_token_parameter ?? null };
 }
 function validateProviderName(name: string) {
   if (name.length < 2 || name.length > 80) throw Object.assign(new Error('El nombre del proveedor debe tener entre 2 y 80 caracteres.'), { status: 400 });
@@ -134,7 +138,7 @@ router.post('/:providerId/models/sync', async (req: AuthRequest, res, next) => {
     const now = new Date().toISOString();
     const upsert = db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,context_tokens,max_input_tokens,max_output_tokens,created_at,updated_at)
       VALUES(?,?,?,?,?,'available',?,?,?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,status='available',
-      context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),max_input_tokens=COALESCE(excluded.max_input_tokens,provider_models.max_input_tokens),max_output_tokens=COALESCE(excluded.max_output_tokens,provider_models.max_output_tokens),source='detected',updated_at=excluded.updated_at`);
+      context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),max_input_tokens=COALESCE(excluded.max_input_tokens,provider_models.max_input_tokens),max_output_tokens=excluded.max_output_tokens,source='detected',updated_at=excluded.updated_at`);
     const transaction = db.transaction((models: ModelSummary[]) => {
       const found = new Set(models.map((m) => m.id));
       for (const model of models) upsert.run(crypto.randomUUID(), provider.id, model.id, model.displayName, 'detected', model.contextTokens ?? null, model.maxInputTokens ?? null, model.maxOutputTokens ?? null, now, now);
@@ -160,8 +164,8 @@ router.post('/:providerId/models', (req: AuthRequest, res, next) => {
     const maxInputTokens = parseTokenLimit(req.body?.maxInputTokens, 'entrada', 1);
     const maxOutputTokens = parseTokenLimit(req.body?.maxOutputTokens, 'salida', 1);
     const now = new Date().toISOString();
-    db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,capabilities_json,context_tokens,max_input_tokens,max_output_tokens,created_at,updated_at)
-      VALUES(?,?,?,?,?,'unknown','{}',?,?,?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,source='manual',status='unknown',context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),max_input_tokens=COALESCE(excluded.max_input_tokens,provider_models.max_input_tokens),max_output_tokens=COALESCE(excluded.max_output_tokens,provider_models.max_output_tokens),updated_at=excluded.updated_at`)
+    db.prepare(`INSERT INTO provider_models(id,provider_id,model_id,display_name,source,status,capabilities_json,context_tokens,max_input_tokens,configured_max_output_tokens,created_at,updated_at)
+      VALUES(?,?,?,?,?,'unknown','{}',?,?,?,?,?) ON CONFLICT(provider_id,model_id) DO UPDATE SET display_name=excluded.display_name,source='manual',status='unknown',context_tokens=COALESCE(excluded.context_tokens,provider_models.context_tokens),max_input_tokens=COALESCE(excluded.max_input_tokens,provider_models.max_input_tokens),configured_max_output_tokens=COALESCE(excluded.configured_max_output_tokens,provider_models.configured_max_output_tokens),updated_at=excluded.updated_at`)
       .run(crypto.randomUUID(), provider.id, modelId, displayName || modelId, 'manual', contextTokens, maxInputTokens, maxOutputTokens, now, now);
     const row = db.prepare('SELECT * FROM provider_models WHERE provider_id=? AND model_id=?').get(provider.id, modelId);
     res.status(201).json(modelDto(row));
@@ -188,10 +192,16 @@ router.patch('/:providerId/models/:modelId', (req: AuthRequest, res, next) => {
     const favorite = req.body?.favorite === undefined ? model.favorite : req.body.favorite;
     const contextTokens = req.body?.contextTokens === undefined ? model.context_tokens : parseTokenLimit(req.body.contextTokens, 'contexto', 256);
     const maxInputTokens = req.body?.maxInputTokens === undefined ? model.max_input_tokens : parseTokenLimit(req.body.maxInputTokens, 'entrada', 1);
-    const maxOutputTokens = req.body?.maxOutputTokens === undefined ? model.max_output_tokens : parseTokenLimit(req.body.maxOutputTokens, 'salida', 1);
+    const configuredMaxOutputTokens = req.body?.maxOutputTokens === undefined ? model.configured_max_output_tokens : parseTokenLimit(req.body.maxOutputTokens, 'salida', 1);
+    const outputTokenParameter = req.body?.outputTokenParameter === undefined ? model.output_token_parameter : req.body.outputTokenParameter;
+    const configurableParameter = ['openai', 'openai-compatible', 'custom'].includes(provider.type);
+    if (outputTokenParameter !== null && outputTokenParameter !== undefined
+      && (outputTokenParameter !== 'max_tokens' && (!configurableParameter || outputTokenParameter !== 'max_completion_tokens'))) {
+      return res.status(400).json({ error: 'Parámetro de salida no admitido para el modelo.' });
+    }
     const now = new Date().toISOString();
-    db.prepare('UPDATE provider_models SET favorite=?,capabilities_json=?,context_tokens=?,max_input_tokens=?,max_output_tokens=?,updated_at=? WHERE id=?')
-      .run(favorite ? 1 : 0, JSON.stringify(capabilities), contextTokens, maxInputTokens, maxOutputTokens, now, model.id);
+    db.prepare('UPDATE provider_models SET favorite=?,capabilities_json=?,context_tokens=?,max_input_tokens=?,configured_max_output_tokens=?,output_token_parameter=?,updated_at=? WHERE id=?')
+      .run(favorite ? 1 : 0, JSON.stringify(capabilities), contextTokens, maxInputTokens, configuredMaxOutputTokens, outputTokenParameter || null, now, model.id);
     res.json(modelDto(db.prepare('SELECT * FROM provider_models WHERE id=?').get(model.id)));
   } catch (error) { next(error); }
 });

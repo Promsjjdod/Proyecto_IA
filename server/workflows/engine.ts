@@ -5,7 +5,7 @@ import type { ProviderRecord, CanonicalMessage } from '../providers/types.js';
 import { estimateTextUnits, reserveUsage, releaseUsage, settleUsage } from '../usage.js';
 import type { AuthUser } from '../auth.js';
 import { cleanRelativePath, ownedProject, readProjectFile, projectFilePath, validateFileName, MAX_PROJECT_FILE_BYTES, writeProjectFilesAtomically } from '../workspaces/paths.js';
-import { budgetForMode, MODE_POLICIES, normalizeUsageMode, outputLimitForRequest, TASK_TOKEN_BUDGET, type UsageMode } from '../config.js';
+import { budgetForMode, MODE_POLICIES, normalizeUsageMode, outputLimitForRequest, resolveModelOutputLimit, TASK_TOKEN_BUDGET, type UsageMode } from '../config.js';
 import { appendContinuation, buildContinuationMessages } from '../continuation.js';
 
 export type FlowNode = { id: string; type: string; name?: string; config?: Record<string, unknown>; position?: { x: number; y: number } };
@@ -65,14 +65,15 @@ function templated(value: unknown, context: { input: string; result: string; var
     return typeof item === 'string' ? item : JSON.stringify(item ?? '');
   });
 }
-function providerFor(userId: string, providerId: unknown, modelId: unknown): { provider: ProviderRecord; modelId: string; contextTokens: number | null; maxInputTokens: number | null; maxOutputTokens: number | null } {
+function providerFor(userId: string, providerId: unknown, modelId: unknown): { provider: ProviderRecord; modelId: string; contextTokens: number | null; maxInputTokens: number | null; maxOutputTokens: number | null; outputTokenParameter: string | null } {
   const id = String(providerId || ''); const model = String(modelId || '');
   if (!id || !model) throw new Error('El nodo IA necesita un proveedor y un modelo.');
   const provider = db.prepare('SELECT * FROM providers WHERE id=? AND user_id=?').get(id, userId) as ProviderRecord | undefined;
-  const modelRow = db.prepare('SELECT status,context_tokens,max_input_tokens,max_output_tokens FROM provider_models WHERE provider_id=? AND model_id=?').get(id, model) as { status: string; context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null } | undefined;
+  const modelRow = db.prepare('SELECT status,context_tokens,max_input_tokens,max_output_tokens,configured_max_output_tokens,output_token_parameter FROM provider_models WHERE provider_id=? AND model_id=?').get(id, model) as { status: string; context_tokens: number | null; max_input_tokens: number | null; max_output_tokens: number | null; configured_max_output_tokens: number | null; output_token_parameter: string | null } | undefined;
   if (!provider || !modelRow) throw new Error('El proveedor o modelo del nodo IA no está conectado a esta cuenta.');
   if (modelRow.status === 'unavailable') throw new Error(`El modelo ${model} aparece como no disponible.`);
-  return { provider, modelId: model, contextTokens: modelRow.context_tokens, maxInputTokens: modelRow.max_input_tokens, maxOutputTokens: modelRow.max_output_tokens };
+  const outputLimit = resolveModelOutputLimit(modelRow.max_output_tokens, modelRow.configured_max_output_tokens);
+  return { provider, modelId: model, contextTokens: modelRow.context_tokens, maxInputTokens: modelRow.max_input_tokens, maxOutputTokens: outputLimit.maxOutputTokens, outputTokenParameter: modelRow.output_token_parameter };
 }
 async function safeHttpRequest(config: Record<string, unknown>, input: string, signal: AbortSignal) {
   const method = String(config.method || 'GET').toUpperCase();
@@ -225,7 +226,7 @@ export async function executeWorkflow(user: AuthUser, workflow: { id: string; us
                 maxOutputTokens: selected.maxOutputTokens,
               }, TASK_TOKEN_BUDGET - taskOutputTokens, inputTokens);
               if (requestOutputLimit === null || requestOutputLimit < 1) throw new Error(`No se conoce un límite de salida válido o se agotó el presupuesto acumulado para ${selected.modelId}.`);
-              const result = await completeText(selected.provider, selected.modelId, messages, nodeMode, controller.signal, requestOutputLimit);
+              const result = await completeText(selected.provider, selected.modelId, messages, nodeMode, controller.signal, requestOutputLimit, selected.outputTokenParameter);
               const status = continuationStatus(result.finishReason);
               nodeText = appendContinuation(nodeText, result.text);
               const outputTokens = Number(result.usage?.completion_tokens ?? result.usage?.output_tokens ?? result.usage?.candidatesTokenCount);

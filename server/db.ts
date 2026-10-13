@@ -298,6 +298,11 @@ db.exec('CREATE INDEX IF NOT EXISTS chats_deleted_recent_idx ON chats(user_id, d
 const modelColumns = db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[];
 if (!modelColumns.some((column) => column.name === 'max_input_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_input_tokens INTEGER');
 if (!modelColumns.some((column) => column.name === 'max_output_tokens')) db.exec('ALTER TABLE provider_models ADD COLUMN max_output_tokens INTEGER');
+if (!modelColumns.some((column) => column.name === 'configured_max_output_tokens')) {
+  db.exec('ALTER TABLE provider_models ADD COLUMN configured_max_output_tokens INTEGER');
+  db.exec('UPDATE provider_models SET configured_max_output_tokens=max_output_tokens,max_output_tokens=NULL WHERE max_output_tokens IS NOT NULL');
+}
+if (!modelColumns.some((column) => column.name === 'output_token_parameter')) db.exec('ALTER TABLE provider_models ADD COLUMN output_token_parameter TEXT');
 const workflowColumns = db.prepare('PRAGMA table_info(workflows)').all() as { name: string }[];
 if (!workflowColumns.some((column) => column.name === 'enabled')) db.exec('ALTER TABLE workflows ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
 

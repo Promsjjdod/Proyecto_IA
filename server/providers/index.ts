@@ -12,12 +12,15 @@ function validatedOutputTokenLimit(outputTokenLimit?: number) {
   return outputTokenLimit;
 }
 
-export function outputTokenLimitFields(providerType: string, outputTokenLimit?: number): Record<string, unknown> {
+export function outputTokenLimitFields(providerType: string, outputTokenLimit?: number, configuredParameter?: string | null): Record<string, unknown> {
   const limit = validatedOutputTokenLimit(outputTokenLimit);
   if (limit === undefined) return {};
   if (providerType === 'google') return { generationConfig: { maxOutputTokens: limit } };
-  if (providerType === 'openai') return { max_completion_tokens: limit };
-  return { max_tokens: limit };
+  if (providerType === 'anthropic') return { max_tokens: limit };
+  const configurableParameter = ['openai', 'openai-compatible', 'custom'].includes(providerType);
+  const parameter = configuredParameter || (providerType === 'openai' ? 'max_completion_tokens' : 'max_tokens');
+  if (parameter !== 'max_tokens' && (!configurableParameter || parameter !== 'max_completion_tokens')) throw new Error('El parámetro de salida configurado para el modelo no es válido para esta integración.');
+  return { [parameter]: limit };
 }
 
 function secretOf(provider: ProviderRecord) {
@@ -168,7 +171,7 @@ function prepareGoogleContents(messages: CanonicalMessage[]) {
   return { system, contents };
 }
 
-export async function* streamCompletion(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, signal?: AbortSignal, outputTokenLimit?: number): AsyncGenerator<StreamEvent> {
+export async function* streamCompletion(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, signal?: AbortSignal, outputTokenLimit?: number, outputTokenParameter?: string | null): AsyncGenerator<StreamEvent> {
   void mode;
   const maxOutputTokens = validatedOutputTokenLimit(outputTokenLimit);
   try {
@@ -178,15 +181,15 @@ export async function* streamCompletion(provider: ProviderRecord, model: string,
     if (provider.type === 'google') {
       const prepared = prepareGoogleContents(messages);
       url = googleUrl(provider, `/models/${encodeURIComponent(modelIdForGoogle(model))}:streamGenerateContent?alt=sse`);
-      body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens) };
+      body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     } else if (provider.type === 'anthropic') {
       if (!maxOutputTokens) throw new Error('Anthropic requiere max_tokens; configura el máximo de salida real del modelo antes de generar.');
       const prepared = prepareAnthropicMessages(messages);
       url = endpoint(provider, '/messages');
-      body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages, stream: true };
+      body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages, stream: true };
     } else {
       url = endpoint(provider, '/chat/completions');
-      body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens), stream: true };
+      body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), stream: true };
     }
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
     if (!response.ok) return await responseError(provider, response);
@@ -200,7 +203,7 @@ export async function* streamCompletion(provider: ProviderRecord, model: string,
   }
 }
 
-export async function completeText(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, signal?: AbortSignal, outputTokenLimit?: number) {
+export async function completeText(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, signal?: AbortSignal, outputTokenLimit?: number, outputTokenParameter?: string | null) {
   void mode;
   const maxOutputTokens = validatedOutputTokenLimit(outputTokenLimit);
   try {
@@ -210,15 +213,15 @@ export async function completeText(provider: ProviderRecord, model: string, mess
     if (provider.type === 'google') {
       const prepared = prepareGoogleContents(messages);
       url = googleUrl(provider, `/models/${encodeURIComponent(modelIdForGoogle(model))}:generateContent`);
-      body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens) };
+      body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     } else if (provider.type === 'anthropic') {
       if (!maxOutputTokens) throw new Error('Anthropic requiere max_tokens; configura el máximo de salida real del modelo antes de generar.');
       const prepared = prepareAnthropicMessages(messages);
       url = endpoint(provider, '/messages');
-      body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages };
+      body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages };
     } else {
       url = endpoint(provider, '/chat/completions');
-      body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens) };
+      body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     }
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
     if (!response.ok) return await responseError(provider, response);
@@ -231,7 +234,7 @@ export async function completeText(provider: ProviderRecord, model: string, mess
   }
 }
 
-export async function completeWithTools(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, tools: ToolDefinition[], signal?: AbortSignal, outputTokenLimit?: number) {
+export async function completeWithTools(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, tools: ToolDefinition[], signal?: AbortSignal, outputTokenLimit?: number, outputTokenParameter?: string | null) {
   if (!['openai', 'openai-compatible', 'custom', 'deepseek', 'anthropic'].includes(provider.type)) {
     throw new Error('La integración de herramientas está preparada para APIs OpenAI compatibles y Anthropic; este proveedor no tiene formato de herramientas implementado.');
   }
@@ -245,11 +248,11 @@ export async function completeWithTools(provider: ProviderRecord, model: string,
       if (!maxOutputTokens) throw new Error('Anthropic requiere max_tokens; configura el máximo de salida real del modelo antes de generar.');
       const prepared = prepareAnthropicMessages(messages);
       url = endpoint(provider, '/messages');
-      body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages,
+      body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages,
         tools: tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.schema })) };
     } else {
       url = endpoint(provider, '/chat/completions');
-      body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens),
+      body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter),
         tools: tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.schema } })), tool_choice: 'auto' };
     }
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });

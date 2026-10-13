@@ -22,7 +22,7 @@ const { completionStatusFromReason, effectiveTaskTokenBudget, remainingTaskToken
 const paths = await import('../server/workspaces/paths.js');
 const { executeWorkflow, validateWorkflow } = await import('../server/workflows/engine.js');
 const { generateWorkflowDraft, getWorkflowGeneratorOptions } = await import('../server/workflows/generator.js');
-const { PROJECT_DIR, UPLOAD_DIR, DEFAULT_TASK_TOKEN_BUDGET, TASK_TOKEN_BUDGET, MAX_TASK_TOKENS, budgetForMode, outputLimitForRequest, normalizeUsageMode } = await import('../server/config.js');
+const { PROJECT_DIR, UPLOAD_DIR, DEFAULT_TASK_TOKEN_BUDGET, TASK_TOKEN_BUDGET, MAX_TASK_TOKENS, budgetForMode, outputLimitForRequest, normalizeUsageMode, resolveModelOutputLimit } = await import('../server/config.js');
 const { cleanupUnreferencedAttachments } = await import('../server/uploads.js');
 const { reserveUsage, settleUsage, estimateTextUnits } = await import('../server/usage.js');
 
@@ -74,16 +74,25 @@ test('credential encryption, provider allowlists, and DNS-pinned requests', asyn
   assert.equal(outputLimitForRequest({ maxInputTokens: 16_000, maxOutputTokens: 8_192 }, 1_000_000, 16_000), 8_192);
   assert.equal(outputLimitForRequest({ maxOutputTokens: 8_192 }, 3_000, 12_000), 3_000);
   assert.equal(outputLimitForRequest({ contextTokens: 32_768, maxOutputTokens: null }, 1_000_000, 12_000), null);
+  assert.deepEqual(resolveModelOutputLimit(4096, 2048), { maxOutputTokens: 4096, source: 'provider-metadata' });
+  assert.deepEqual(resolveModelOutputLimit(null, 2048), { maxOutputTokens: 2048, source: 'user-configured' });
+  assert.deepEqual(resolveModelOutputLimit(null, null), { maxOutputTokens: null, source: 'unknown' });
   assert.deepEqual(outputTokenLimitFields('openai', 4_096), { max_completion_tokens: 4_096 });
+  assert.deepEqual(outputTokenLimitFields('openai', 4_096, 'max_tokens'), { max_tokens: 4_096 });
+  assert.deepEqual(outputTokenLimitFields('openai-compatible', 4_096, 'max_completion_tokens'), { max_completion_tokens: 4_096 });
+  assert.throws(() => outputTokenLimitFields('deepseek', 4_096, 'max_completion_tokens'), /integración/i);
   assert.deepEqual(outputTokenLimitFields('anthropic', 8_192), { max_tokens: 8_192 });
   assert.deepEqual(outputTokenLimitFields('google', 2_048), { generationConfig: { maxOutputTokens: 2_048 } });
   assert.deepEqual(outputTokenLimitFields('deepseek', 6_144), { max_tokens: 6_144 });
   assert.deepEqual(outputTokenLimitFields('openai-compatible', 3_072), { max_tokens: 3_072 });
+  assert.deepEqual(outputTokenLimitFields('ollama', 1_024), { max_tokens: 1_024 });
   assert.deepEqual(outputTokenLimitFields('openai', undefined), {});
   assert.equal(normalizeUsageMode('ALTO'), 'HIGH');
   assert.equal(normalizeUsageMode('EXTRA'), 'HIGH');
   assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'max_input_tokens'));
   assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'max_output_tokens'));
+  assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'configured_max_output_tokens'));
+  assert.ok((db.prepare('PRAGMA table_info(provider_models)').all() as { name: string }[]).some((column) => column.name === 'output_token_parameter'));
   const encrypted = encryptSecret('test-secret-value');
   assert.notEqual(encrypted, 'test-secret-value');
   assert.equal(decryptSecret(encrypted), 'test-secret-value');
@@ -790,7 +799,11 @@ test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles
   const savedModelLimits = await saveModelLimits.json() as any;
   assert.equal(savedModelLimits.contextTokens, 16384);
   assert.equal(savedModelLimits.maxInputTokens, 10240);
-  assert.equal(savedModelLimits.maxOutputTokens, 2048);
+  assert.equal(savedModelLimits.maxOutputTokens, 4096);
+  assert.equal(savedModelLimits.providerMaxOutputTokens, 4096);
+  assert.equal(savedModelLimits.configuredMaxOutputTokens, 2048);
+  assert.equal(savedModelLimits.outputLimitSource, 'provider-metadata');
+  assert.equal(savedModelLimits.outputTokenParameter, null);
   const invalidModelLimit = await fetch(`${origin}/api/providers/${firstProviderId}/models/vision-test`, {
     method: 'PATCH', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ maxOutputTokens: 0 }),
@@ -809,6 +822,76 @@ test('HTTP API enforces registration, sessions, CSRF, ownership, and admin roles
   const manualModel = await addManualModel.json() as any;
   assert.equal(manualModel.maxInputTokens, 6144);
   assert.equal(manualModel.maxOutputTokens, 1024);
+  assert.equal(manualModel.configuredMaxOutputTokens, 1024);
+  assert.equal(manualModel.outputLimitSource, 'user-configured');
+  const addUnknownModel = await fetch(`${origin}/api/providers/${firstProviderId}/models`, {
+    method: 'POST', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modelId: 'unknown-output-test' }),
+  });
+  assert.equal(addUnknownModel.status, 201);
+  const unknownModel = await addUnknownModel.json() as any;
+  assert.equal(unknownModel.maxOutputTokens, null);
+  assert.equal(unknownModel.outputLimitSource, 'unknown');
+  const setOutputParameter = await fetch(`${origin}/api/providers/${firstProviderId}/models/manual-output-test`, {
+    method: 'PATCH', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputTokenParameter: 'max_tokens' }),
+  });
+  assert.equal(setOutputParameter.status, 200);
+  assert.equal((await setOutputParameter.json() as any).outputTokenParameter, 'max_tokens');
+  const rereadModel = await fetch(`${origin}/api/providers/${firstProviderId}/models`, { headers: { Cookie: first.cookie } });
+  const rereadManualModel = (await rereadModel.json() as any[]).find((model) => model.id === 'manual-output-test');
+  assert.equal(rereadManualModel.configuredMaxOutputTokens, 1024);
+  assert.equal(rereadManualModel.outputTokenParameter, 'max_tokens');
+  let metadataAvailable = true;
+  const metadataServer = http.createServer((request, response) => {
+    if (request.url !== '/api/tags') { response.writeHead(404).end(); return; }
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ models: [
+      { name: 'synced-model', ...(metadataAvailable ? { max_output_tokens: 7777 } : {}) },
+      { name: 'synced-model-small', ...(metadataAvailable ? { max_output_tokens: 1024 } : {}) },
+    ] }));
+  });
+  const metadataPort = await listen(metadataServer, '::');
+  t.after(() => close(metadataServer));
+  const previousOllamaAllowlist = process.env.OLLAMA_ALLOWED_URLS;
+  process.env.OLLAMA_ALLOWED_URLS = `http://localhost:${metadataPort}`;
+  t.after(() => { process.env.OLLAMA_ALLOWED_URLS = previousOllamaAllowlist || 'http://localhost:11434,http://127.0.0.1:11434,http://[::1]:11434'; });
+  const metadataProviderId = crypto.randomUUID();
+  db.prepare('INSERT INTO providers(id,user_id,type,name,base_url,secret_encrypted,auth_config_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+    .run(metadataProviderId, first.body.user.id, 'ollama', 'Metadata mock', `http://localhost:${metadataPort}`, '', '{}', 'connected', now, now);
+  const addConfiguredSyncModel = await fetch(`${origin}/api/providers/${metadataProviderId}/models`, {
+    method: 'POST', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modelId: 'synced-model', maxOutputTokens: 512 }),
+  });
+  assert.equal(addConfiguredSyncModel.status, 201);
+  const syncModels = await fetch(`${origin}/api/providers/${metadataProviderId}/models/sync`, {
+    method: 'POST', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  assert.equal(syncModels.status, 200);
+  const syncedModels = (await syncModels.json() as any).models as any[];
+  const syncedModel = syncedModels.find((model) => model.id === 'synced-model');
+  assert.equal(syncedModel.providerMaxOutputTokens, 7777);
+  assert.equal(syncedModel.configuredMaxOutputTokens, 512);
+  assert.equal(syncedModel.maxOutputTokens, 7777);
+  assert.equal(syncedModel.outputLimitSource, 'provider-metadata');
+  const syncedModelSmall = syncedModels.find((model) => model.id === 'synced-model-small');
+  assert.equal(syncedModelSmall.maxOutputTokens, 1024);
+  metadataAvailable = false;
+  const resync = await fetch(`${origin}/api/providers/${metadataProviderId}/models/sync`, {
+    method: 'POST', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  assert.equal(resync.status, 200);
+  const resyncedModels = (await resync.json() as any).models as any[];
+  const resyncedModel = resyncedModels.find((model) => model.id === 'synced-model');
+  assert.equal(resyncedModel.providerMaxOutputTokens, null);
+  assert.equal(resyncedModel.configuredMaxOutputTokens, 512);
+  assert.equal(resyncedModel.maxOutputTokens, 512);
+  assert.equal(resyncedModel.outputLimitSource, 'user-configured');
+  const unsupportedOutputParameter = await fetch(`${origin}/api/providers/${metadataProviderId}/models/synced-model`, {
+    method: 'PATCH', headers: { Cookie: first.cookie, 'X-CSRF-Token': first.body.csrfToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outputTokenParameter: 'max_completion_tokens' }),
+  });
+  assert.equal(unsupportedOutputParameter.status, 400);
 
   const imageId = crypto.randomUUID();
   const imageDir = path.join(UPLOAD_DIR, first.body.user.id, 'images');

@@ -9,7 +9,7 @@ export type User = {
   preferences: Record<string, any>; plan: string; createdAt: string;
 };
 export type Provider = { id: string; type: string; name: string; baseUrl: string; hasKey: boolean; status: string; lastCheckedAt?: string; modelCount: number };
-export type Model = { id: string; displayName: string; source: 'detected' | 'manual'; status: string; favorite: boolean; capabilities: Record<string, boolean>; contextTokens?: number | null; maxInputTokens?: number | null; maxOutputTokens?: number | null };
+export type Model = { id: string; displayName: string; source: 'detected' | 'manual'; status: string; favorite: boolean; capabilities: Record<string, boolean>; contextTokens?: number | null; maxInputTokens?: number | null; maxOutputTokens?: number | null; providerMaxOutputTokens?: number | null; configuredMaxOutputTokens?: number | null; outputLimitSource?: 'provider-metadata' | 'user-configured' | 'unknown'; outputTokenParameter?: 'max_tokens' | 'max_completion_tokens' | null };
 export type Chat = { id: string; title: string; projectId?: string | null; createdAt: string; updatedAt: string; deletedAt?: string | null; messageCount: number };
 export type Attachment = { id: string; name: string; mimeType: string; size: number; isImage?: boolean; source?: 'upload' | 'image-library'; fileUrl?: string };
 export type Message = { id: string; role: 'user' | 'assistant' | 'system'; content: string; providerId?: string; modelId?: string; mode?: Mode; agentId?: string; attachments?: Attachment[]; meta?: Record<string, any>; createdAt: string };

@@ -35,6 +35,21 @@ export const TASK_TOKEN_BUDGET = Number.isSafeInteger(configuredTaskBudget) && c
   : DEFAULT_TASK_TOKEN_BUDGET;
 export type UsageMode = keyof typeof MODE_POLICIES;
 export type ModelTokenLimits = { contextTokens?: number | null; maxInputTokens?: number | null; maxOutputTokens?: number | null };
+export type OutputTokenLimitSource = 'provider-metadata' | 'user-configured' | 'unknown';
+
+function validModelOutputLimit(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function resolveModelOutputLimit(providerMetadataLimit?: unknown, configuredLimit?: unknown) {
+  const providerLimit = validModelOutputLimit(providerMetadataLimit);
+  if (providerLimit !== null) return { maxOutputTokens: providerLimit, source: 'provider-metadata' as const };
+  const userLimit = validModelOutputLimit(configuredLimit);
+  if (userLimit !== null) return { maxOutputTokens: userLimit, source: 'user-configured' as const };
+  return { maxOutputTokens: null, source: 'unknown' as const };
+}
+
 export function normalizeUsageMode(value: unknown): UsageMode | null {
   const normalized = String(value || '').toUpperCase();
   if (normalized === 'ALTO' || normalized === 'EXTRA') return 'HIGH';

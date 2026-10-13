@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import fs from 'node:fs';
 import { db } from '../db.js';
-import { budgetForMode, MODE_POLICIES, MAX_TASK_TOKENS, normalizeUsageMode, outputLimitForRequest, PROJECT_DIR, TASK_TOKEN_BUDGET, UPLOAD_DIR, type UsageMode } from '../config.js';
+import { budgetForMode, MODE_POLICIES, MAX_TASK_TOKENS, normalizeUsageMode, outputLimitForRequest, PROJECT_DIR, resolveModelOutputLimit, TASK_TOKEN_BUDGET, UPLOAD_DIR, type UsageMode } from '../config.js';
 import { requireAuth, type AuthRequest, type AuthUser } from '../auth.js';
 import { decryptSecret } from '../security.js';
 import type { CanonicalMessage, ProviderRecord, ToolCall, ToolDefinition } from '../providers/types.js';
@@ -427,7 +427,8 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
     const provider = ownedProvider(req.user!.id, providerId);
     const model = modelRecord(provider.id, modelId);
     responseProviderId = provider.id; responseModelId = modelId; responseMode = mode; responseAgentId = agent?.id || null;
-    const modelLimits = { contextTokens: model.context_tokens, maxInputTokens: model.max_input_tokens, maxOutputTokens: model.max_output_tokens };
+    const modelOutput = resolveModelOutputLimit(model.max_output_tokens, model.configured_max_output_tokens);
+    const modelLimits = { contextTokens: model.context_tokens, maxInputTokens: model.max_input_tokens, maxOutputTokens: modelOutput.maxOutputTokens };
     const modeBudget = budgetForMode(mode, modelLimits);
     if (modeBudget.outputTokens === null) return res.status(400).json({ error: `No se conoce el máximo de salida de ${modelId}. Configura el límite documentado en Proveedores → Modelos; Nexus no inventará uno.` });
     if (modeBudget.inputContextTokens !== null && modeBudget.inputContextTokens < 1) return res.status(400).json({ error: `El límite de entrada configurado para ${modelId} no deja espacio para el contexto. Revísalo en Proveedores → Modelos.` });
@@ -571,7 +572,7 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
       let continuationBase: CanonicalMessage[] | null = null;
       while (rounds < 6) {
         if (cancelled) throw Object.assign(new Error('Generación cancelada por el usuario.'), { cancelled: true });
-        const result = await completeWithTools(provider, modelId, messages, mode, tools, controller.signal, nextOutputLimit(messages));
+        const result = await completeWithTools(provider, modelId, messages, mode, tools, controller.signal, nextOutputLimit(messages), model.output_token_parameter);
         recordRequestUsage(result.usage, result.text, messages.map((message) => message.content).join('\n'));
         finishReason = String(result.finishReason || '');
         completionStatus = completionStatusFromReason(finishReason);
@@ -635,7 +636,7 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
         let finalText = '';
         let finalRound = 0;
         for (; finalRound < 1024 && remainingTaskTokenBudget(taskOutputTokens, taskTokenBudget) > 0; finalRound += 1) {
-          const final = await completeWithTools(provider, modelId, finalMessages, mode, [], controller.signal, nextOutputLimit(finalMessages));
+          const final = await completeWithTools(provider, modelId, finalMessages, mode, [], controller.signal, nextOutputLimit(finalMessages), model.output_token_parameter);
           recordRequestUsage(final.usage, final.text, finalMessages.map((message) => message.content).join('\n'));
           finalText = appendContinuation(finalText, final.text);
           finishReason = String(final.finishReason || '');
@@ -691,7 +692,7 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
         let requestInputTokens: number | undefined;
         let requestText = '';
         const textBeforeRequest = accumulated;
-        for await (const chunk of streamCompletion(provider, modelId, messages, mode, controller.signal, requestOutputLimit)) {
+        for await (const chunk of streamCompletion(provider, modelId, messages, mode, controller.signal, requestOutputLimit, model.output_token_parameter)) {
           if (cancelled) throw Object.assign(new Error('Generación cancelada por el usuario.'), { cancelled: true });
           if (chunk.type === 'delta') {
             requestText += chunk.text;
