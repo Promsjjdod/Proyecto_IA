@@ -1,4 +1,5 @@
 import type { StreamEvent } from './types.js';
+import { providerTextContent } from './content.js';
 
 function tokenCount(value: unknown) {
   const count = Number(value);
@@ -42,8 +43,9 @@ function frameEvents(providerType: string, frame: ReturnType<typeof parseFrame>)
   if (frame.sentinel || !frame.payload) return [];
   const payload = frame.payload as any;
   if (frame.event === 'error' || payload.error) {
-    const detail = payload.error?.message || payload.message || 'Error de streaming del proveedor.';
-    throw new Error(String(detail).slice(0, 1000));
+    const detail = typeof payload.error?.message === 'string' ? payload.error.message
+      : typeof payload.message === 'string' ? payload.message : 'Error de streaming del proveedor.';
+    throw new Error(detail.slice(0, 1000));
   }
   const result: StreamEvent[] = [];
   if (providerType === 'anthropic') {
@@ -68,7 +70,7 @@ function frameEvents(providerType: string, frame: ReturnType<typeof parseFrame>)
     const usage = usageEvent(payload.usageMetadata);
     if (usage) result.push(usage);
     for (const candidate of payload.candidates || []) {
-      const text = candidate.content?.parts?.map((part: any) => typeof part.text === 'string' ? part.text : '').join('');
+      const text = providerTextContent(candidate.content?.parts);
       if (text) result.push({ type: 'delta', text });
       const finish = finishEvent(providerType, candidate.finishReason);
       if (finish) result.push(finish);
@@ -81,7 +83,8 @@ function frameEvents(providerType: string, frame: ReturnType<typeof parseFrame>)
     const content = choice.delta?.content ?? choice.message?.content;
     if (typeof content === 'string' && content) result.push({ type: 'delta', text: content });
     else if (Array.isArray(content)) {
-      for (const part of content) if (typeof part?.text === 'string' && part.text) result.push({ type: 'delta', text: part.text });
+      const text = providerTextContent(content);
+      if (text) result.push({ type: 'delta', text });
     }
     const finish = finishEvent(providerType, choice.finish_reason);
     if (finish) result.push(finish);

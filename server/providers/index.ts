@@ -2,6 +2,7 @@ import { decryptSecret, redactedError } from '../security.js';
 import { safeProviderFetch } from './safety.js';
 import type { CanonicalMessage, ProviderRecord, StreamEvent, ToolCall, ToolDefinition } from './types.js';
 import { parseProviderSSE } from './sse.js';
+import { providerTextContent } from './content.js';
 import type { UsageMode } from '../config.js';
 
 export type ModelSummary = { id: string; displayName: string; contextTokens?: number; maxInputTokens?: number; maxOutputTokens?: number };
@@ -65,8 +66,9 @@ async function responseError(provider: ProviderRecord, response: Response): Prom
   const body = await response.text().catch(() => '');
   let detail = body;
   try {
-    const parsed = JSON.parse(body) as { error?: { message?: string }; message?: string };
-    detail = parsed.error?.message || parsed.message || body;
+    const parsed = JSON.parse(body) as { error?: { message?: unknown }; message?: unknown };
+    detail = typeof parsed.error?.message === 'string' ? parsed.error.message
+      : typeof parsed.message === 'string' ? parsed.message : body;
   } catch { /* plain-text upstream error */ }
   const generic = `Proveedor respondió HTTP ${response.status}${detail ? `: ${detail}` : ''}`;
   throw new Error(providerMessage(provider, generic));
@@ -224,9 +226,9 @@ export async function completeText(provider: ProviderRecord, model: string, mess
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
     if (!response.ok) return await responseError(provider, response);
     const result = await response.json() as any;
-    if (provider.type === 'google') return { text: result.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '', usage: result.usageMetadata, finishReason: result.candidates?.[0]?.finishReason || null };
-    if (provider.type === 'anthropic') return { text: result.content?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || '', usage: result.usage, finishReason: result.stop_reason || null };
-    return { text: result.choices?.[0]?.message?.content || '', usage: result.usage, finishReason: result.choices?.[0]?.finish_reason || null };
+    if (provider.type === 'google') return { text: providerTextContent(result.candidates?.[0]?.content?.parts), usage: result.usageMetadata, finishReason: result.candidates?.[0]?.finishReason || null };
+    if (provider.type === 'anthropic') return { text: providerTextContent(result.content), usage: result.usage, finishReason: result.stop_reason || null };
+    return { text: providerTextContent(result.choices?.[0]?.message?.content), usage: result.usage, finishReason: result.choices?.[0]?.finish_reason || null };
   } catch (error) {
     throw new Error(providerMessage(provider, error instanceof Error ? error.message : `No se pudo contactar con ${provider.name}.`));
   }
