@@ -6,26 +6,53 @@ export class QuotaError extends Error { status = 429; }
 function monthStart(date = new Date()) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)).toISOString(); }
 function dayStart(date = new Date()) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString(); }
 
-export function reserveUsage(user: AuthUser, idempotencyKey: string, operation: string, estimatedInputTokens: number, outputBudget: number, meta: Record<string, unknown> = {}) {
+export function reserveUsage(
+  user: AuthUser,
+  idempotencyKey: string,
+  operation: string,
+  estimatedInputTokens: number,
+  outputBudget: number | null,
+  meta: Record<string, unknown> = {},
+  options: { allowOutputBudgetTruncation?: boolean } = {},
+) {
   if (!idempotencyKey || idempotencyKey.length > 100) throw Object.assign(new Error('Identificador de solicitud no válido.'), { status: 400 });
-  const reserved = Math.max(1, Math.ceil(estimatedInputTokens) + Math.max(1, Math.ceil(outputBudget)));
+  const inputBudget = Math.max(0, Math.ceil(estimatedInputTokens));
+  const requestedOutputBudget = outputBudget === null ? 1 : Math.max(1, Math.ceil(outputBudget));
   const now = new Date().toISOString();
   const reserve = db.transaction(() => {
     const duplicate = db.prepare('SELECT id,status FROM usage WHERE user_id=? AND idempotency_key=?').get(user.id, idempotencyKey) as { id: string; status: string } | undefined;
     if (duplicate) throw Object.assign(new Error('Esta solicitud ya se procesó o está en curso. No se repitió para evitar consumo duplicado.'), { status: 409 });
+    let effectiveOutputBudget = requestedOutputBudget;
     if (user.role !== 'admin') {
       const current = db.prepare('SELECT credits,daily_limit,monthly_limit FROM users WHERE id=?').get(user.id) as { credits: number; daily_limit: number; monthly_limit: number };
       const dayUsage = (db.prepare(`SELECT COALESCE(SUM(CASE WHEN status='reserved' THEN reserved WHEN status='complete' THEN credits ELSE 0 END),0) total FROM usage WHERE user_id=? AND created_at>=?`).get(user.id, dayStart()) as { total: number }).total;
       const monthUsage = (db.prepare(`SELECT COALESCE(SUM(CASE WHEN status='reserved' THEN reserved WHEN status='complete' THEN credits ELSE 0 END),0) total FROM usage WHERE user_id=? AND created_at>=?`).get(user.id, monthStart()) as { total: number }).total;
-      if (current.credits < reserved) throw new QuotaError(`Créditos insuficientes para reservar hasta ${reserved} unidades internas. Saldo: ${current.credits}.`);
-      if (dayUsage + reserved > current.daily_limit) throw new QuotaError(`Se superaría el límite diario de ${current.daily_limit} unidades. Reduce el tamaño de la tarea o inténtalo mañana.`);
-      if (monthUsage + reserved > current.monthly_limit) throw new QuotaError(`Se superaría el límite mensual de ${current.monthly_limit} unidades.`);
+      if (options.allowOutputBudgetTruncation) {
+        const available = Math.min(
+          current.credits,
+          Math.max(0, current.daily_limit - dayUsage),
+          Math.max(0, current.monthly_limit - monthUsage),
+        );
+        effectiveOutputBudget = Math.min(requestedOutputBudget, available - inputBudget);
+        if (effectiveOutputBudget < 1) {
+          if (current.credits < inputBudget + 1) throw new QuotaError(`Créditos insuficientes para reservar la entrada y al menos una unidad de salida. Saldo: ${current.credits}.`);
+          if (dayUsage + inputBudget + 1 > current.daily_limit) throw new QuotaError(`Se superaría el límite diario de ${current.daily_limit} unidades. Reduce el tamaño de la tarea o inténtalo mañana.`);
+          throw new QuotaError(`Se superaría el límite mensual de ${current.monthly_limit} unidades.`);
+        }
+      } else {
+        const requestedReservation = inputBudget + requestedOutputBudget;
+        if (current.credits < requestedReservation) throw new QuotaError(`Créditos insuficientes para reservar hasta ${requestedReservation} unidades internas. Saldo: ${current.credits}.`);
+        if (dayUsage + requestedReservation > current.daily_limit) throw new QuotaError(`Se superaría el límite diario de ${current.daily_limit} unidades. Reduce el tamaño de la tarea o inténtalo mañana.`);
+        if (monthUsage + requestedReservation > current.monthly_limit) throw new QuotaError(`Se superaría el límite mensual de ${current.monthly_limit} unidades.`);
+      }
+      const reserved = inputBudget + effectiveOutputBudget;
       db.prepare('UPDATE users SET credits=credits-? WHERE id=?').run(reserved, user.id);
     }
+    const reserved = user.role === 'admin' ? 0 : inputBudget + effectiveOutputBudget;
     const id = crypto.randomUUID();
     db.prepare(`INSERT INTO usage(id,user_id,idempotency_key,operation,credits,reserved,status,meta_json,created_at,updated_at)
-      VALUES(?,?,?,?,0,?,'reserved',?,?,?)`).run(id, user.id, idempotencyKey, operation, user.role === 'admin' ? 0 : reserved, JSON.stringify({ ...meta, reservation: reserved, adminBypass: user.role === 'admin' }), now, now);
-    return { id, reserved: user.role === 'admin' ? 0 : reserved, adminBypass: user.role === 'admin' };
+      VALUES(?,?,?,?,0,?,'reserved',?,?,?)`).run(id, user.id, idempotencyKey, operation, reserved, JSON.stringify({ ...meta, reservation: reserved, outputBudget: effectiveOutputBudget, adminBypass: user.role === 'admin' }), now, now);
+    return { id, reserved, outputBudget: effectiveOutputBudget, adminBypass: user.role === 'admin' };
   });
   return reserve.immediate();
 }

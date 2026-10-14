@@ -386,7 +386,7 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
   let responseAgentId: string | null = null;
   const controller = new AbortController();
   const requestStarted = Date.now();
-  const taskTokenBudget = effectiveTaskTokenBudget();
+  let taskTokenBudget = effectiveTaskTokenBudget();
   let taskOutputTokens = 0;
   let usageEstimated = false;
   try {
@@ -513,7 +513,15 @@ router.post('/:chatId/messages', async (req: AuthRequest, res, next) => {
     updateGenerationCheckpoint({ userId: req.user!.id, chatId: chat.id, status: 'running', currentText: accumulated, inputTokens: providerUsage.inputTokens, outputTokens: taskOutputTokens, reason: finishReason || null, nextStep: 'prerendering', files: [] });
     const initialOutputLimit = outputLimitForRequest(modelLimits, remainingTaskTokenBudget(alreadyGeneratedTokens, taskTokenBudget), inputEstimate);
     if (initialOutputLimit !== null && initialOutputLimit < 1) return res.status(400).json({ error: 'El contexto de entrada y el presupuesto restante no dejan tokens disponibles para generar otra solicitud.' });
-    reservation = reserveUsage(req.user!, requestId, 'chat', inputEstimate, initialOutputLimit ?? 0, { providerId, modelId, mode, chatId: chat.id });
+    reservation = reserveUsage(
+      req.user!, requestId, 'chat', inputEstimate,
+      remainingTaskTokenBudget(alreadyGeneratedTokens, taskTokenBudget),
+      { providerId, modelId, mode, chatId: chat.id },
+      { allowOutputBudgetTruncation: true },
+    );
+    if (req.user!.role !== 'admin') {
+      taskTokenBudget = Math.min(taskTokenBudget, alreadyGeneratedTokens + reservation.outputBudget);
+    }
     if (!existingMessageId) {
       const now = new Date().toISOString();
       const messageId = crypto.randomUUID();

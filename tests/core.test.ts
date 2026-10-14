@@ -361,6 +361,17 @@ test('chat integration continues long output across requests without duplication
     assert.equal(unknownLimitCalls.length, 2);
     assert.ok(unknownLimitCalls.every((call) => !Object.hasOwn(call.body, 'max_tokens')), 'unknown provider limit must rely on the API default');
 
+    scenario = 'complete';
+    db.prepare('UPDATE users SET credits=50000,daily_limit=100000,monthly_limit=100000 WHERE id=?').run(userId);
+    db.prepare('UPDATE provider_models SET max_output_tokens=65536 WHERE provider_id=? AND model_id=?').run(providerId, modelId);
+    const boundedStart = calls.length;
+    const boundedChat = await collectedFor(createChat(), 'MAX');
+    const boundedCalls = calls.slice(boundedStart);
+    assert.equal(boundedChat.done.completionStatus, 'complete');
+    assert.equal(boundedCalls.length, 2);
+    assert.ok(boundedCalls[0].body.max_tokens < 65_536, 'the effective output cap must fit the 50,000-unit account balance');
+    assert.ok(boundedCalls[0].body.max_tokens <= 50_000);
+
     scenario = 'multi';
     const multiChatId = createChat();
     const multi = await collectedFor(multiChatId);
@@ -397,6 +408,37 @@ test('chat integration continues long output across requests without duplication
 });
 
 test('usage settlement refunds unused reservations and cannot exceed account quotas', () => {
+  const maxOutputUser = insertTestUser('max-output-reservation@nexus.test');
+  db.prepare('UPDATE users SET credits=50000,daily_limit=100000,monthly_limit=100000 WHERE id=?').run(maxOutputUser.id);
+  const maxOutputAccount = db.prepare('SELECT * FROM users WHERE id=?').get(maxOutputUser.id) as any;
+  const requestedMaximum = 31 + 65_536;
+  assert.equal(requestedMaximum, 65_567);
+  assert.throws(
+    () => reserveUsage(maxOutputAccount, crypto.randomUUID(), 'test', 31, 65_536),
+    /65567 unidades internas\. Saldo: 50000/,
+    'the full pre-fix reservation is reproduced when adaptive output budgeting is not requested',
+  );
+  const boundedReservation = reserveUsage(maxOutputAccount, crypto.randomUUID(), 'chat', 31, 65_536, {}, { allowOutputBudgetTruncation: true });
+  assert.equal(boundedReservation.reserved, 50_000);
+  assert.equal(boundedReservation.outputBudget, 49_969);
+  assert.equal((db.prepare('SELECT credits FROM users WHERE id=?').get(maxOutputUser.id) as any).credits, 0);
+  settleUsage(maxOutputUser.id, boundedReservation, 100);
+  assert.equal((db.prepare('SELECT credits FROM users WHERE id=?').get(maxOutputUser.id) as any).credits, 49_900);
+
+  const dailyLimitUser = insertTestUser('max-output-daily-limit@nexus.test');
+  db.prepare('UPDATE users SET credits=50000,daily_limit=15000,monthly_limit=100000 WHERE id=?').run(dailyLimitUser.id);
+  const dailyLimitAccount = db.prepare('SELECT * FROM users WHERE id=?').get(dailyLimitUser.id) as any;
+  const highModelOutput = outputLimitForRequest({ maxOutputTokens: 2_000_000 }, TASK_TOKEN_BUDGET, 31);
+  assert.equal(highModelOutput, 1_000_000);
+  const dailyBoundedReservation = reserveUsage(dailyLimitAccount, crypto.randomUUID(), 'chat', 31, highModelOutput, {}, { allowOutputBudgetTruncation: true });
+  assert.equal(dailyBoundedReservation.reserved, 15_000);
+  assert.equal(dailyBoundedReservation.outputBudget, 14_969);
+  assert.throws(
+    () => reserveUsage(dailyLimitAccount, crypto.randomUUID(), 'chat', 50_000, 65_536),
+    /créditos insuficientes/i,
+    'reject a request whose input alone leaves no room for generation',
+  );
+
   const cappedUser = insertTestUser('quota-cap@nexus.test');
   db.prepare('UPDATE users SET credits=500,daily_limit=100,monthly_limit=100 WHERE id=?').run(cappedUser.id);
   const limitedUser = db.prepare('SELECT * FROM users WHERE id=?').get(cappedUser.id) as any;
