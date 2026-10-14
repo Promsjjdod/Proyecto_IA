@@ -16,13 +16,13 @@ const { db } = await import('../server/db.js');
 const { encryptSecret, decryptSecret } = await import('../server/security.js');
 const safety = await import('../server/providers/safety.js');
 const { parseProviderSSE } = await import('../server/providers/sse.js');
-const { streamCompletion, outputTokenLimitFields } = await import('../server/providers/index.js');
+const { streamCompletion, completeText, providerAuthHeaders, providerEndpoint, outputTokenLimitFields, supportsToolProtocol } = await import('../server/providers/index.js');
 const { buildContinuationMessages, appendContinuation } = await import('../server/continuation.js');
 const { completionStatusFromReason, effectiveTaskTokenBudget, remainingTaskTokenBudget, shouldAutoContinueGeneration, saveGenerationCheckpoint, loadGenerationCheckpoint } = await import('../server/chats/routes.js');
 const paths = await import('../server/workspaces/paths.js');
 const { executeWorkflow, validateWorkflow } = await import('../server/workflows/engine.js');
 const { generateWorkflowDraft, getWorkflowGeneratorOptions } = await import('../server/workflows/generator.js');
-const { PROJECT_DIR, UPLOAD_DIR, DEFAULT_TASK_TOKEN_BUDGET, TASK_TOKEN_BUDGET, MAX_TASK_TOKENS, budgetForMode, outputLimitForRequest, normalizeUsageMode, resolveModelOutputLimit } = await import('../server/config.js');
+const { PROJECT_DIR, UPLOAD_DIR, DEFAULT_PROVIDER_URLS, DEFAULT_TASK_TOKEN_BUDGET, TASK_TOKEN_BUDGET, MAX_TASK_TOKENS, budgetForMode, outputLimitForRequest, normalizeUsageMode, resolveModelOutputLimit } = await import('../server/config.js');
 const { cleanupUnreferencedAttachments } = await import('../server/uploads.js');
 const { reserveUsage, settleUsage, estimateTextUnits } = await import('../server/usage.js');
 
@@ -196,16 +196,69 @@ test('token-limit reasons and large task budgets are handled without duplicating
   assert.equal(checkpointId.id.length > 0, true);
 });
 
+test('xKiro provider credentials stay encrypted and resolve to the documented OpenAI/Anthropic auth headers', () => {
+  const user = insertTestUser('xkiro-provider@nexus.test');
+  const credential = 'xkiro-test-key-not-a-real-credential';
+  const providerId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO providers(id,user_id,type,name,base_url,secret_encrypted,auth_config_json,status,created_at,updated_at)
+    VALUES(?,?,'xkiro','xKiro test',?,?, '{}','connected',?,?)`)
+    .run(providerId, user.id, DEFAULT_PROVIDER_URLS.xkiro, encryptSecret(credential), now, now);
+  const stored = db.prepare('SELECT * FROM providers WHERE id=? AND user_id=?').get(providerId, user.id) as any;
+  assert.notEqual(stored.secret_encrypted, credential);
+  assert.equal(decryptSecret(stored.secret_encrypted), credential);
+  assert.deepEqual(providerAuthHeaders(stored), {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${credential}`,
+  });
+  assert.equal(providerEndpoint({ ...stored, base_url: 'https://api.xkiro.com/v1/' }, '/chat/completions').href, 'https://api.xkiro.com/v1/chat/completions');
+  assert.equal(providerEndpoint(stored, '/models').href, 'https://api.xkiro.com/v1/models');
+  assert.equal(
+    providerEndpoint({ ...stored, base_url: 'https://generativelanguage.googleapis.com/v1beta/' }, '/models/gemini:streamGenerateContent?alt=sse').href,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini:streamGenerateContent?alt=sse',
+  );
+  assert.equal(DEFAULT_PROVIDER_URLS.xkiro, 'https://api.xkiro.com/v1');
+  assert.deepEqual(outputTokenLimitFields('xkiro', 2048), { max_tokens: 2048 });
+  assert.equal(supportsToolProtocol('xkiro'), true);
+
+  const missingKey = { ...stored, secret_encrypted: '' };
+  assert.equal(Object.hasOwn(providerAuthHeaders(missingKey), 'Authorization'), false);
+  const anthropic = { ...stored, type: 'anthropic' };
+  assert.deepEqual(providerAuthHeaders(anthropic), {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01',
+    'x-api-key': credential,
+  });
+  assert.equal(providerEndpoint({ ...anthropic, base_url: 'https://api.xkiro.com' }, '/messages').href, 'https://api.xkiro.com/messages');
+  assert.equal(Object.hasOwn(providerAuthHeaders(stored, false), 'Content-Type'), false);
+});
+
 test('provider adapters send the model-specific output-token ceiling upstream', async (t) => {
   const requestBodies: any[] = [];
+  const requestDetails: { url: string; authorization: string | undefined }[] = [];
   let rejectWithRateLimit = false;
+  let echoCredentialInError = false;
   const server = http.createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
     request.on('end', () => {
-      requestBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      requestBodies.push(body);
+      requestDetails.push({ url: request.url || '', authorization: request.headers.authorization });
       if (rejectWithRateLimit) {
         response.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'account-specific rate limit exceeded' } }));
+        return;
+      }
+      if (echoCredentialInError) {
+        response.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: `Missing credential local-provider-test-key-only` } }));
+        return;
+      }
+      if (!body.stream) {
+        response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+          choices: [{ message: { content: 'non-stream response' }, finish_reason: 'stop' }],
+        }));
         return;
       }
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
@@ -218,7 +271,8 @@ test('provider adapters send the model-specific output-token ceiling upstream', 
   const previousAllowlist = process.env.OLLAMA_ALLOWED_URLS;
   process.env.OLLAMA_ALLOWED_URLS = `http://localhost:${port}`;
   t.after(() => { process.env.OLLAMA_ALLOWED_URLS = previousAllowlist || 'http://localhost:11434,http://127.0.0.1:11434,http://[::1]:11434'; });
-  const provider = { id: 'test-provider', user_id: 'test-user', type: 'ollama', name: 'Mock local provider', base_url: baseUrl, secret_encrypted: '', auth_config_json: '{}' };
+  const requestCredential = 'local-provider-test-key-only';
+  const provider = { id: 'test-provider', user_id: 'test-user', type: 'ollama', name: 'Mock local provider', base_url: baseUrl, secret_encrypted: encryptSecret(requestCredential), auth_config_json: '{}' };
   const modes = ['LOW', 'MEDIO', 'HIGH', 'MAX'] as const;
   for (const mode of modes) {
     const events = [];
@@ -227,10 +281,28 @@ test('provider adapters send the model-specific output-token ceiling upstream', 
     assert.equal((events.find((event) => event.type === 'finish') as any)?.complete, true);
   }
   assert.deepEqual(requestBodies.map((body) => body.max_tokens), modes.map(() => 1024));
+  const normalResult = await completeText(provider, 'mock-model', [{ role: 'user', content: 'non-stream request' }], 'MEDIO');
+  assert.equal(normalResult.text, 'non-stream response');
+  assert.ok(requestDetails.every((item) => item.authorization === `Bearer ${requestCredential}`));
+  assert.ok(requestDetails.every((item) => item.url === '/v1/chat/completions'));
+  assert.ok(requestBodies.every((body) => !JSON.stringify(body).includes(requestCredential)));
+  assert.equal(providerEndpoint({ ...provider, type: 'xkiro', base_url: baseUrl }, '/chat/completions').pathname, '/v1/chat/completions');
   rejectWithRateLimit = true;
   await assert.rejects((async () => {
     for await (const _event of streamCompletion(provider, 'mock-model', [{ role: 'user', content: 'retry me' }], 'MEDIO')) void _event;
   })(), /account-specific rate limit exceeded/i);
+  rejectWithRateLimit = false;
+  echoCredentialInError = true;
+  await assert.rejects(
+    (async () => {
+      for await (const _event of streamCompletion(provider, 'mock-model', [{ role: 'user', content: 'auth error' }], 'MEDIO')) void _event;
+    })(),
+    (error: Error) => {
+      assert.match(error.message, /redacted/i);
+      assert.equal(error.message.includes(requestCredential), false);
+      return true;
+    },
+  );
 });
 
 test('chat integration continues long output across requests without duplication and preserves partial output on failure', async (t) => {

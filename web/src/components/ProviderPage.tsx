@@ -5,6 +5,7 @@ import { api } from '../api';
 import { ErrorBanner, Modal, ProviderIcon } from './common';
 
 const providerInfo: Record<string, { label: string; defaultUrl: string; hint: string }> = {
+  xkiro: { label: 'xKiro', defaultUrl: 'https://api.xkiro.com/v1', hint: 'API OpenAI-compatible de xKiro. Usa Authorization: Bearer con tu clave; el backend llama /v1/chat/completions.' },
   openai: { label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1', hint: 'API oficial de OpenAI.' },
   anthropic: { label: 'Anthropic', defaultUrl: 'https://api.anthropic.com/v1', hint: 'Claude API. Se usa el endpoint oficial de lista de modelos.' },
   google: { label: 'Google Gemini', defaultUrl: 'https://generativelanguage.googleapis.com/v1beta', hint: 'Gemini API. La clave se transmite al backend en la query del endpoint oficial, nunca al navegador.' },

@@ -28,7 +28,16 @@ function secretOf(provider: ProviderRecord) {
   return decryptSecret(provider.secret_encrypted);
 }
 function apiBase(provider: ProviderRecord) { return provider.base_url.replace(/\/+$/, ''); }
-function endpoint(provider: ProviderRecord, suffix: string) { return new URL(`${apiBase(provider)}${suffix}`); }
+export function providerEndpoint(provider: ProviderRecord, suffix: string) {
+  const url = new URL(provider.base_url);
+  const basePath = url.pathname.replace(/\/+$/, '');
+  const queryStart = suffix.indexOf('?');
+  const suffixPath = queryStart === -1 ? suffix : suffix.slice(0, queryStart);
+  const suffixQuery = queryStart === -1 ? '' : suffix.slice(queryStart);
+  url.pathname = `${basePath}${suffixPath.startsWith('/') ? suffixPath : `/${suffixPath}`}`;
+  if (suffixQuery) url.search = suffixQuery;
+  return url;
+}
 function providerMessage(provider: ProviderRecord, message: string) {
   const secret = secretOf(provider);
   const cleaned = redactedError(message, secret);
@@ -39,12 +48,14 @@ function providerMessage(provider: ProviderRecord, message: string) {
   return cleaned || `Error al comunicarse con ${provider.name}.`;
 }
 
-function authHeaders(provider: ProviderRecord, json = true) {
+export function providerAuthHeaders(provider: ProviderRecord, json = true) {
   const secret = secretOf(provider);
   const config = JSON.parse(provider.auth_config_json || '{}') as { headerName?: string; prefix?: string };
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (json) headers['Content-Type'] = 'application/json';
-  if (provider.type === 'anthropic') {
+  if (provider.type === 'xkiro') {
+    if (secret) headers.Authorization = `Bearer ${secret}`;
+  } else if (provider.type === 'anthropic') {
     headers['anthropic-version'] = '2023-06-01';
     if (secret) headers['x-api-key'] = secret;
   } else if (provider.type !== 'google' && secret) {
@@ -55,7 +66,7 @@ function authHeaders(provider: ProviderRecord, json = true) {
   return headers;
 }
 function googleUrl(provider: ProviderRecord, suffix: string) {
-  const url = endpoint(provider, suffix);
+  const url = providerEndpoint(provider, suffix);
   const secret = secretOf(provider);
   if (secret) url.searchParams.set('key', secret);
   return url;
@@ -80,8 +91,8 @@ async function fetchModels(provider: ProviderRecord): Promise<ModelSummary[]> {
   else if (provider.type === 'ollama') {
     const base = apiBase(provider).replace(/\/v1$/i, '');
     url = new URL(`${base}/api/tags`);
-  } else url = endpoint(provider, '/models');
-  const response = await safeProviderFetch(provider, url, { method: 'GET', headers: authHeaders(provider, false) });
+  } else url = providerEndpoint(provider, '/models');
+  const response = await safeProviderFetch(provider, url, { method: 'GET', headers: providerAuthHeaders(provider, false) });
   if (!response.ok) return responseError(provider, response);
   const result = await response.json() as any;
   if (provider.type === 'google') {
@@ -179,17 +190,17 @@ export async function* streamCompletion(provider: ProviderRecord, model: string,
   try {
     let url: URL;
     let body: unknown;
-    const headers = authHeaders(provider);
+    const headers = providerAuthHeaders(provider);
     if (provider.type === 'google') {
       const prepared = prepareGoogleContents(messages);
       url = googleUrl(provider, `/models/${encodeURIComponent(modelIdForGoogle(model))}:streamGenerateContent?alt=sse`);
       body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     } else if (provider.type === 'anthropic') {
       const prepared = prepareAnthropicMessages(messages);
-      url = endpoint(provider, '/messages');
+      url = providerEndpoint(provider, '/messages');
       body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages, stream: true };
     } else {
-      url = endpoint(provider, '/chat/completions');
+      url = providerEndpoint(provider, '/chat/completions');
       body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), stream: true };
     }
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
@@ -210,17 +221,17 @@ export async function completeText(provider: ProviderRecord, model: string, mess
   try {
     let url: URL;
     let body: unknown;
-    const headers = authHeaders(provider);
+    const headers = providerAuthHeaders(provider);
     if (provider.type === 'google') {
       const prepared = prepareGoogleContents(messages);
       url = googleUrl(provider, `/models/${encodeURIComponent(modelIdForGoogle(model))}:generateContent`);
       body = { ...(prepared.system ? { systemInstruction: { parts: [{ text: prepared.system }] } } : {}), contents: prepared.contents, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     } else if (provider.type === 'anthropic') {
       const prepared = prepareAnthropicMessages(messages);
-      url = endpoint(provider, '/messages');
+      url = providerEndpoint(provider, '/messages');
       body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages };
     } else {
-      url = endpoint(provider, '/chat/completions');
+      url = providerEndpoint(provider, '/chat/completions');
       body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter) };
     }
     const response = await safeProviderFetch(provider, url, { method: 'POST', headers, body: JSON.stringify(body), signal });
@@ -235,22 +246,22 @@ export async function completeText(provider: ProviderRecord, model: string, mess
 }
 
 export async function completeWithTools(provider: ProviderRecord, model: string, messages: CanonicalMessage[], mode: UsageMode, tools: ToolDefinition[], signal?: AbortSignal, outputTokenLimit?: number, outputTokenParameter?: string | null) {
-  if (!['openai', 'openai-compatible', 'custom', 'deepseek', 'anthropic'].includes(provider.type)) {
+  if (!['xkiro', 'openai', 'openai-compatible', 'custom', 'deepseek', 'anthropic'].includes(provider.type)) {
     throw new Error('La integración de herramientas está preparada para APIs OpenAI compatibles y Anthropic; este proveedor no tiene formato de herramientas implementado.');
   }
   void mode;
   const maxOutputTokens = validatedOutputTokenLimit(outputTokenLimit);
   try {
-    const headers = authHeaders(provider);
+    const headers = providerAuthHeaders(provider);
     let url: URL;
     let body: unknown;
     if (provider.type === 'anthropic') {
       const prepared = prepareAnthropicMessages(messages);
-      url = endpoint(provider, '/messages');
+      url = providerEndpoint(provider, '/messages');
       body = { model, ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter), ...(prepared.system ? { system: prepared.system } : {}), messages: prepared.messages,
         tools: tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.schema })) };
     } else {
-      url = endpoint(provider, '/chat/completions');
+      url = providerEndpoint(provider, '/chat/completions');
       body = { model, messages: prepareOpenAIMessages(messages), ...outputTokenLimitFields(provider.type, maxOutputTokens, outputTokenParameter),
         tools: tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.schema } })), tool_choice: 'auto' };
     }
@@ -280,5 +291,5 @@ export async function testProvider(provider: ProviderRecord) {
 }
 
 export function supportsToolProtocol(type: string) {
-  return ['openai', 'openai-compatible', 'custom', 'deepseek', 'anthropic'].includes(type);
+  return ['xkiro', 'openai', 'openai-compatible', 'custom', 'deepseek', 'anthropic'].includes(type);
 }

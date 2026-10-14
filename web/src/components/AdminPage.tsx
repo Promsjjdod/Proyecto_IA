@@ -4,7 +4,7 @@ import type { User } from '../types';
 import { api } from '../api';
 import { ErrorBanner, Modal } from './common';
 
-const types: [string, string][] = [['openai', 'OpenAI'], ['anthropic', 'Anthropic'], ['google', 'Gemini'], ['deepseek', 'DeepSeek'], ['ollama', 'Ollama'], ['openai-compatible', 'OpenAI-compatible'], ['custom', 'Personalizado']];
+const types: [string, string][] = [['xkiro', 'xKiro'], ['openai', 'OpenAI'], ['anthropic', 'Anthropic'], ['google', 'Gemini'], ['deepseek', 'DeepSeek'], ['ollama', 'Ollama'], ['openai-compatible', 'OpenAI-compatible'], ['custom', 'Personalizado']];
 type AdminUser = { id: string; email: string; name: string; role: 'admin' | 'user'; credits: number; dailyLimit: number; monthlyLimit: number; operations: number; creditsSpent: number; createdAt: string };
 type Dashboard = { users: number; admins: number; operations: number; internalCreditsSpent: number; failedOperations: number; projects: number; workflows: number; allowedProviderTypes: string[]; audit: any[] };
 export function AdminPage({ user }: { user: User }) {

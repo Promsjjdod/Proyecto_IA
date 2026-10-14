@@ -9,6 +9,7 @@ export const PROJECT_DIR = path.join(DATA_DIR, 'projects');
 export const isProduction = process.env.NODE_ENV === 'production';
 
 export const DEFAULT_PROVIDER_URLS: Record<string, string> = {
+  xkiro: 'https://api.xkiro.com/v1',
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
   google: 'https://generativelanguage.googleapis.com/v1beta',
@@ -18,7 +19,7 @@ export const DEFAULT_PROVIDER_URLS: Record<string, string> = {
   custom: '',
 };
 
-export const ALLOWED_PROVIDER_TYPES = (process.env.ALLOWED_PROVIDER_TYPES || 'openai,anthropic,google,deepseek,ollama,openai-compatible,custom')
+export const ALLOWED_PROVIDER_TYPES = (process.env.ALLOWED_PROVIDER_TYPES || 'xkiro,openai,anthropic,google,deepseek,ollama,openai-compatible,custom')
   .split(',').map((v) => v.trim()).filter(Boolean);
 
 export const MODE_POLICIES = {

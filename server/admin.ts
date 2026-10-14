@@ -5,7 +5,7 @@ import { ALLOWED_PROVIDER_TYPES } from './config.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
-const knownTypes = new Set(['openai', 'anthropic', 'google', 'deepseek', 'ollama', 'openai-compatible', 'custom']);
+const knownTypes = new Set(['xkiro', 'openai', 'anthropic', 'google', 'deepseek', 'ollama', 'openai-compatible', 'custom']);
 function setting(key: string, fallback: unknown) {
   const row = db.prepare('SELECT value_json FROM app_settings WHERE key=?').get(key) as { value_json: string } | undefined;
   if (!row) return fallback;
